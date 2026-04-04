@@ -1,0 +1,65 @@
+{
+  "theme": "Light",
+  "archetype": "4 (Swiss & High-Contrast / Soft Utility Hybrid)",
+  "instructions_to_main_agent": "Refatorar o visual dos componentes React (.jsx) e estilos (index.css) do AgênciaOS para aplicar o novo design sem alterar nenhuma funcionalidade, rota, lógica ou nomeação. NÃO remova elementos. Aplique as classes do Tailwind e atualize as variáveis do CSS conforme as regras abaixo. Adicione 'data-testid' a elementos interativos. NÃO inclua emojis nos arquivos.",
+  "colors": {
+    "primary": "manter atual hsl(225 100% 50%) - azul",
+    "background": "Atualizar --background para um cinza muito claro (ex: hsl(210 40% 98%) ou bg-slate-50) para dar contraste com os cards brancos.",
+    "card": "Atualizar --card para branco (hsl(0 0% 100%)).",
+    "text_headings": "text-slate-900 (alta legibilidade, forte)",
+    "text_body": "text-slate-500 ou text-slate-600 (leve, contraste adequado)",
+    "feedback": {
+      "success": "bg-emerald-50 text-emerald-600 border border-emerald-200",
+      "error": "bg-rose-50 text-rose-600 border border-rose-200",
+      "warning": "bg-amber-50 text-amber-600 border border-amber-200"
+    }
+  },
+  "typography": {
+    "font_family_headings": "Outfit, sans-serif (Adicionar import do Google Fonts no index.css)",
+    "font_family_body": "Inter, sans-serif",
+    "sizes": {
+      "page_title": "text-2xl font-bold tracking-tight text-slate-900",
+      "card_title": "text-xl font-semibold tracking-tight text-slate-800",
+      "body": "text-base text-slate-600 leading-relaxed",
+      "small_labels": "text-sm font-medium text-slate-500 uppercase tracking-wider"
+    }
+  },
+  "layout_spacing": {
+    "main_area_padding": "p-6 md:p-8",
+    "section_gap": "gap-6 ou gap-8",
+    "border_radius": "rounded-xl (12px) para cards, rounded-lg (8px) para botões e itens de menu"
+  },
+  "components": {
+    "sidebar": {
+      "width": "w-16 mobile/colapsado, w-64 desktop",
+      "item_spacing": "space-y-2",
+      "item_padding": "px-3 py-2.5",
+      "item_radius": "rounded-lg",
+      "icons": "Tamanho padronizado: w-5 h-5 (lucide-react). stroke-width: 2.",
+      "state_default": "text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors duration-200 ease-in-out",
+      "state_active": "bg-primary/10 text-primary border-l-4 border-primary font-medium"
+    },
+    "cards": {
+      "background": "bg-card (branco)",
+      "border": "border border-slate-200/60",
+      "radius": "rounded-xl",
+      "shadow": "shadow-sm shadow-slate-200/50",
+      "hover_state": "Se interativo: hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
+    },
+    "buttons": {
+      "radius": "rounded-lg",
+      "transitions": "transition-all duration-200 ease-in-out hover:opacity-90 active:scale-95"
+    },
+    "inputs_and_forms": {
+      "radius": "rounded-lg",
+      "border": "border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200"
+    }
+  },
+  "interactions": {
+    "global_transitions": "transition-all duration-200 ease-in-out",
+    "hover_states": "Obrigatório em todos os botões, links, cards clicáveis e itens de menu."
+  },
+  "testing": {
+    "attributes": "Adicionar data-testid='kebab-case-name' em botões, links e inputs principais."
+  }
+}
