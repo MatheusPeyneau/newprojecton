@@ -221,6 +221,11 @@ class ClientCreate(BaseModel):
     start_date: Optional[str] = None
     due_date: Optional[str] = None
     notes: Optional[str] = Field(None, max_length=10000)
+    client_type: str = "recorrente"          # "recorrente" | "pontual"
+    contract_months: Optional[int] = None   # 3 | 6 | 12
+    end_date: Optional[str] = None          # YYYY-MM-DD (auto or manual)
+    source: Optional[str] = None
+    churn_reason: Optional[str] = None
 
 class ClientUpdate(BaseModel):
     name: Optional[str] = None
@@ -234,6 +239,11 @@ class ClientUpdate(BaseModel):
     start_date: Optional[str] = None
     due_date: Optional[str] = None
     notes: Optional[str] = None
+    client_type: Optional[str] = None
+    contract_months: Optional[int] = None
+    end_date: Optional[str] = None
+    source: Optional[str] = None
+    churn_reason: Optional[str] = None
 
 class WebhookSettings(BaseModel):
     webhook_url: str
@@ -1703,11 +1713,11 @@ def _days_ago(dt_str: str, now: datetime) -> int:
 
 @api_router.get("/dashboard/mrr-trend")
 async def get_mrr_trend(current_user: dict = Depends(get_current_user)):
-    """Return cumulative MRR snapshot for each of the last 6 months."""
+    """Return MRR trend: last 6 months (realized) + next 3 months (projected)."""
     now = datetime.now(timezone.utc)
     clients = await db.clients.find(
         {"org_id": current_user["org_id"], "status": "ativo"},
-        {"_id": 0, "monthly_value": 1, "created_at": 1},
+        {"_id": 0, "monthly_value": 1, "created_at": 1, "end_date": 1},
     ).to_list(500)
 
     def _month_end_iso(year: int, month: int) -> str:
@@ -1715,17 +1725,38 @@ async def get_mrr_trend(current_user: dict = Depends(get_current_user)):
             return datetime(year + 1, 1, 1, tzinfo=timezone.utc).isoformat()
         return datetime(year, month + 1, 1, tzinfo=timezone.utc).isoformat()
 
+    def _month_start_str(year: int, month: int) -> str:
+        return f"{year:04d}-{month:02d}-01"
+
+    now_iso = now.isoformat()
     trend = []
-    for months_ago in range(5, -1, -1):
-        total = now.year * 12 + now.month - 1 - months_ago
+    # 5 months back → 3 months ahead (9 points total)
+    for delta in range(-5, 4):
+        total = now.year * 12 + now.month - 1 + delta
         year, month = total // 12, total % 12 + 1
         end_iso = _month_end_iso(year, month)
+        start_str = _month_start_str(year, month)
         label = datetime(year, month, 1).strftime("%b/%y")
+        is_future = end_iso > now_iso
+
         mrr_snap = sum(
             c.get("monthly_value", 0) for c in clients
             if c.get("created_at", "") < end_iso
+            and (not c.get("end_date") or c["end_date"] >= start_str)
         )
-        trend.append({"month": label, "mrr": round(mrr_snap, 2)})
+        value = round(mrr_snap, 2)
+
+        if is_future:
+            trend.append({"month": label, "mrr": None, "projected": value})
+        else:
+            trend.append({"month": label, "mrr": value, "projected": None})
+
+    # Connect current month: set projected = mrr so lines don't break
+    for i, point in enumerate(trend):
+        if point["mrr"] is not None and (i + 1 < len(trend)) and trend[i + 1]["projected"] is not None:
+            trend[i]["projected"] = point["mrr"]
+            break
+
     return trend
 
 

@@ -179,29 +179,42 @@ function PeriodSelector({ period, customRange, onChangePeriod, onChangeCustom })
 
 // ——— MRR Trend Chart ———
 function MRRTrendChart({ data, loading }) {
-  const hasData = data && data.some((d) => d.mrr > 0);
+  const hasData = data && data.some((d) => d.mrr > 0 || d.projected > 0);
+  const hasProjected = data && data.some((d) => d.projected != null);
   if (loading) return <Skel className="h-[180px]" />;
   return (
     <div className="bg-card border border-border rounded-lg p-5" data-testid="mrr-trend-section">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-base font-heading font-semibold">Tendência de MRR</h2>
-          <p className="text-xs text-muted-foreground">Últimos 6 meses</p>
+          <p className="text-xs text-muted-foreground">Últimos 6 meses + projeção</p>
         </div>
         {hasData && (
-          <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-            <TrendingUp size={13} />
-            Acumulado
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 font-medium">
+              <div className="w-3 h-0.5 bg-blue-500 rounded" />
+              Realizado
+            </div>
+            {hasProjected && (
+              <div className="flex items-center gap-1.5 text-xs text-violet-500 dark:text-violet-400 font-medium">
+                <div className="w-3 h-0.5 rounded" style={{ background: "repeating-linear-gradient(90deg,#8B5CF6 0,#8B5CF6 4px,transparent 4px,transparent 7px)" }} />
+                Projetado
+              </div>
+            )}
           </div>
         )}
       </div>
       {hasData ? (
-        <ResponsiveContainer width="100%" height={140}>
+        <ResponsiveContainer width="100%" height={150}>
           <AreaChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="mrrGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2} />
                 <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="projGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.15} />
+                <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
@@ -212,10 +225,15 @@ function MRRTrendChart({ data, loading }) {
               tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v} />
             <Tooltip
               contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "11px" }}
-              formatter={(v) => [fmtCurrency(v), "MRR"]}
+              formatter={(v, name) => [fmtCurrency(v), name === "mrr" ? "Realizado" : "Projetado"]}
             />
             <Area type="monotone" dataKey="mrr" stroke="#3B82F6" strokeWidth={2}
-              fill="url(#mrrGradient)" dot={{ fill: "#3B82F6", r: 3 }} activeDot={{ r: 5 }} />
+              fill="url(#mrrGradient)" dot={{ fill: "#3B82F6", r: 3 }} activeDot={{ r: 5 }}
+              connectNulls={false} />
+            <Area type="monotone" dataKey="projected" stroke="#8B5CF6" strokeWidth={2}
+              strokeDasharray="5 4" fill="url(#projGradient)"
+              dot={{ fill: "#8B5CF6", r: 3 }} activeDot={{ r: 5 }}
+              connectNulls={false} />
           </AreaChart>
         </ResponsiveContainer>
       ) : (
