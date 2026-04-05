@@ -710,11 +710,15 @@ async def delete_lead(lead_id: str, current_user: dict = Depends(get_current_use
 
 @api_router.get("/pipeline/stages")
 async def list_stages(type: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    uid = current_user["org_id"]
     pipeline_type = type or "default"
     if pipeline_type == "default":
-        q = {"$or": [{"pipeline_type": "default"}, {"pipeline_type": {"$exists": False}}]}
+        pt_q = {"$or": [{"pipeline_type": "default"}, {"pipeline_type": {"$exists": False}}]}
     else:
-        q = {"pipeline_type": pipeline_type}
+        pt_q = {"pipeline_type": pipeline_type}
+    # Match org stages OR legacy stages without org_id (migration safety)
+    org_q = {"$or": [{"org_id": uid}, {"org_id": {"$exists": False}}]}
+    q = {"$and": [pt_q, org_q]}
     stages = await db.pipeline_stages.find(q, {"_id": 0}).sort("order", 1).to_list(50)
     return stages
 
@@ -725,6 +729,7 @@ async def create_stage(body: StageCreate, current_user: dict = Depends(get_curre
     stage_doc = {
         "stage_id": stage_id,
         **body.model_dump(),
+        "org_id": current_user["org_id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.pipeline_stages.insert_one(stage_doc)
@@ -739,7 +744,7 @@ async def list_deals(pipeline_type: Optional[str] = None, current_user: dict = D
         pt_q = {"$or": [{"pipeline_type": "default"}, {"pipeline_type": {"$exists": False}}]}
     else:
         pt_q = {"pipeline_type": pt}
-    filter_q = {"$and": [not_deleted, pt_q]}
+    filter_q = {"$and": [not_deleted, pt_q, {"org_id": current_user["org_id"]}]}
     deals = await db.deals.find(filter_q, {"_id": 0}).sort("created_at", -1).to_list(500)
     return deals
 
@@ -1209,6 +1214,7 @@ async def list_operational(current_user: dict = Depends(get_current_user)):
         {"$addFields": {
             "client": {"$ifNull": [{"$first": "$client_list"}, {}]}
         }},
+        {"$match": {"client.org_id": current_user["org_id"]}},
         {"$project": {
             "client_list": 0,
             "client._id": 0,
@@ -1317,7 +1323,7 @@ async def generate_carousel(body: CarouselRequest, current_user: dict = Depends(
 
 @api_router.get("/collaborators")
 async def list_collaborators(role: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    q: Dict[str, Any] = {"is_active": True}
+    q: Dict[str, Any] = {"is_active": True, "org_id": current_user["org_id"]}
     if role:
         q["role"] = role
     collaborators = await db.collaborators.find(q, {"_id": 0}).sort("name", 1).to_list(200)
@@ -1328,7 +1334,7 @@ async def list_collaborators(role: Optional[str] = None, current_user: dict = De
 async def create_collaborator(body: CollaboratorCreate, current_user: dict = Depends(get_current_user)):
     collab_id = f"collab_{uuid.uuid4().hex[:10]}"
     now = datetime.now(timezone.utc).isoformat()
-    doc = {"collaborator_id": collab_id, **body.model_dump(), "is_active": True, "created_at": now}
+    doc = {"collaborator_id": collab_id, **body.model_dump(), "org_id": current_user["org_id"], "is_active": True, "created_at": now}
     await db.collaborators.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
 
@@ -1734,8 +1740,10 @@ async def get_dashboard_kpis(period: int = 30, current_user: dict = Depends(get_
 
     uid = current_user["org_id"]
 
-    # Stage metadata — stages have no org field (global per pipeline_type)
-    stages = await db.pipeline_stages.find({}, {"_id": 0}).sort("order", 1).to_list(50)
+    # Stage metadata — filter by org (legacy stages without org_id still included)
+    stages = await db.pipeline_stages.find(
+        {"$or": [{"org_id": uid}, {"org_id": {"$exists": False}}]}, {"_id": 0}
+    ).sort("order", 1).to_list(50)
     won_stage_id = next((s["stage_id"] for s in stages if s.get("is_won_stage") or "ganho" in s["name"].lower()), None)
     lost_stage_id = next(
         (s["stage_id"] for s in stages if "perdido" in s["name"].lower() or "perdi" in s["name"].lower()),
