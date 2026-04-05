@@ -75,10 +75,13 @@ function AlertBanner({ alerts }) {
 }
 
 // ——— KPI Card ———
-function KPICard({ title, value, sub, icon: Icon, iconCls, testId }) {
+function KPICard({ title, value, sub, icon: Icon, iconCls, testId, onClick }) {
   return (
     <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.15 }}
-      className="bg-card border border-border rounded-lg p-5" data-testid={testId}>
+      className={cn("bg-card border border-border rounded-lg p-5", onClick && "cursor-pointer hover:border-primary/40 transition-colors")}
+      data-testid={testId}
+      onClick={onClick}
+    >
       <div className="mb-4">
         <div className={cn("p-2 rounded-md w-fit", iconCls || "bg-primary/10")}>
           <Icon size={17} />
@@ -400,6 +403,7 @@ export default function Dashboard() {
           icon={DollarSign}
           iconCls="bg-blue-50 dark:bg-blue-950/40 text-blue-600"
           testId="kpi-mrr"
+          onClick={() => navigate("/clientes")}
         />
         <KPICard
           title="Receita Prevista"
@@ -408,6 +412,7 @@ export default function Dashboard() {
           icon={TrendingUp}
           iconCls="bg-violet-50 dark:bg-violet-950/40 text-violet-600"
           testId="kpi-predicted-revenue"
+          onClick={() => navigate("/comercial/pipeline")}
         />
         <KPICard
           title="Ticket Médio"
@@ -416,6 +421,7 @@ export default function Dashboard() {
           icon={Target}
           iconCls="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600"
           testId="kpi-ticket-avg"
+          onClick={() => navigate("/clientes")}
         />
         <KPICard
           title="Risco de Churn"
@@ -424,6 +430,7 @@ export default function Dashboard() {
           icon={AlertCircle}
           iconCls="bg-red-50 dark:bg-red-950/40 text-red-600"
           testId="kpi-churn-risk"
+          onClick={() => navigate("/clientes")}
         />
       </div>
 
@@ -536,23 +543,40 @@ export default function Dashboard() {
           <div className="flex items-center gap-2 mb-4">
             <ListTodo size={14} className="text-red-500 shrink-0" />
             <h2 className="text-sm font-heading font-semibold">Tarefas Atrasadas</h2>
-          </div>
-          <div className="flex flex-col items-center justify-center h-[100px] gap-2">
-            <p className={cn("text-5xl font-heading font-bold leading-none",
-              (kpis?.overdue_tasks_count || 0) > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"
-            )} data-testid="overdue-tasks-count">
-              {kpis?.overdue_tasks_count || 0}
-            </p>
-            <p className="text-xs text-muted-foreground text-center">
-              {(kpis?.overdue_tasks_count || 0) > 0 ? "tarefas em atraso no operacional" : "Operacional em dia!"}
-            </p>
             {(kpis?.overdue_tasks_count || 0) > 0 && (
-              <button onClick={() => navigate("/operacional")}
-                className="text-xs text-primary hover:underline flex items-center gap-1 mt-1" data-testid="goto-operacional-btn">
-                Ver operacional <ChevronRight size={11} />
-              </button>
+              <span className="ml-auto text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full font-semibold" data-testid="overdue-tasks-count">
+                {kpis.overdue_tasks_count}
+              </span>
             )}
           </div>
+          {(kpis?.overdue_tasks || []).length > 0 ? (
+            <div>
+              {kpis.overdue_tasks.map((t) => (
+                <div key={t.task_id} className="flex items-center justify-between gap-2 py-2.5 border-b border-border last:border-0">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{t.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">{t.client_name || "Sem cliente"}</p>
+                  </div>
+                  <span className="text-xs font-bold text-red-600 dark:text-red-400 shrink-0 tabular-nums">
+                    {t.days_overdue}d
+                  </span>
+                </div>
+              ))}
+              {(kpis?.overdue_tasks_count || 0) > 5 && (
+                <button onClick={() => navigate("/operacional")}
+                  className="text-xs text-primary hover:underline mt-3 flex items-center gap-1" data-testid="goto-operacional-btn">
+                  Ver todas ({kpis.overdue_tasks_count}) <ChevronRight size={11} />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-24">
+              <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                Nenhuma tarefa em atraso.<br />
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Operacional em dia!</span>
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Propostas sem Resposta */}

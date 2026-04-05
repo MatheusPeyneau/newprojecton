@@ -10,7 +10,7 @@ import logging
 import uuid
 import httpx
 import asyncio
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -1756,9 +1756,9 @@ async def get_dashboard_kpis(period: int = 30, current_user: dict = Depends(get_
         recent_leads,
         leads_source_agg,
         mrr_agg,
-        overdue_tasks_count,
+        overdue_tasks_raw,
         churn_risk_count,
-    ) = await asyncio.gather(
+    ) = await asyncio.gather(  # type: ignore[assignment]
         db.leads.count_documents({"user_id": uid}),
         db.leads.count_documents({"user_id": uid, "created_at": {"$gte": period_start_iso}}),
         db.clients.count_documents({"user_id": uid, "status": "ativo"}),
@@ -1773,12 +1773,12 @@ async def get_dashboard_kpis(period: int = 30, current_user: dict = Depends(get_
             {"$match": {"user_id": uid, "status": "ativo"}},
             {"$group": {"_id": None, "total": {"$sum": "$monthly_value"}}},
         ]).to_list(1),
-        db.operational_tasks.count_documents({
+        db.operational_tasks.find({
             "user_id": uid,
             "status": {"$nin": ["DONE"]},
             "due_date": {"$lt": today_str, "$ne": None},
             "$or": [{"deleted_at": {"$exists": False}}, {"deleted_at": None}],
-        }),
+        }, {"_id": 0, "task_id": 1, "title": 1, "client_id": 1, "due_date": 1}).sort("due_date", 1).to_list(50),
         db.clients.count_documents({
             "user_id": uid,
             "status": "ativo",
@@ -1875,6 +1875,26 @@ async def get_dashboard_kpis(period: int = 30, current_user: dict = Depends(get_
 
     leads_by_source = [{"source": r["_id"] or "manual", "count": r["count"]} for r in leads_source_agg]
 
+    # Build overdue tasks list with client names
+    if overdue_tasks_raw:
+        client_ids = list({t["client_id"] for t in overdue_tasks_raw if t.get("client_id")})
+        clients_map = {}
+        if client_ids:
+            clients_list = await db.clients.find({"client_id": {"$in": client_ids}}, {"_id": 0, "client_id": 1, "name": 1}).to_list(len(client_ids))
+            clients_map = {c["client_id"]: c["name"] for c in clients_list}
+        overdue_tasks = [
+            {
+                "task_id": t.get("task_id", ""),
+                "title": t.get("title", ""),
+                "client_name": clients_map.get(t.get("client_id", ""), ""),
+                "due_date": t.get("due_date", ""),
+                "days_overdue": max(0, (now.date() - date.fromisoformat(t["due_date"])).days) if t.get("due_date") else 0,
+            }
+            for t in overdue_tasks_raw[:5]
+        ]
+    else:
+        overdue_tasks = []
+
     return {
         "total_leads": total_leads,
         "leads_this_period": leads_this_month,
@@ -1895,7 +1915,8 @@ async def get_dashboard_kpis(period: int = 30, current_user: dict = Depends(get_
         "stale_deals_count": len(stale_raw),
         "proposals_no_response": proposals_no_response,
         "proposals_no_response_count": len(proposals_raw),
-        "overdue_tasks_count": overdue_tasks_count,
+        "overdue_tasks_count": len(overdue_tasks_raw),
+        "overdue_tasks": overdue_tasks,
         "leads_by_source": leads_by_source,
     }
 
