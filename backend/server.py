@@ -1734,18 +1734,21 @@ async def get_dashboard_kpis(period: int = 30, current_user: dict = Depends(get_
 
     uid = current_user["org_id"]
 
-    # Stage metadata
-    stages = await db.pipeline_stages.find({"user_id": uid}, {"_id": 0}).sort("order", 1).to_list(20)
-    won_stage_id = next((s["stage_id"] for s in stages if "ganho" in s["name"].lower()), "stage_ganho01")
+    # Stage metadata — stages have no org field (global per pipeline_type)
+    stages = await db.pipeline_stages.find({}, {"_id": 0}).sort("order", 1).to_list(50)
+    won_stage_id = next((s["stage_id"] for s in stages if s.get("is_won_stage") or "ganho" in s["name"].lower()), None)
     lost_stage_id = next(
         (s["stage_id"] for s in stages if "perdido" in s["name"].lower() or "perdi" in s["name"].lower()),
-        "stage_perdi01",
+        None,
     )
     proposta_stage_id = next(
-        (s["stage_id"] for s in stages if "propos" in s["name"].lower()), "stage_propos01"
+        (s["stage_id"] for s in stages if "propos" in s["name"].lower()), None
     )
 
-    active_deal_q = {"user_id": uid, "$or": [{"deleted_at": {"$exists": False}}, {"deleted_at": None}]}
+    active_deal_q = {"org_id": uid, "$or": [{"deleted_at": {"$exists": False}}, {"deleted_at": None}]}
+
+    # Get org client_ids to filter tasks (tasks have no org_id, only client_id)
+    org_client_ids = await db.clients.distinct("client_id", {"org_id": uid})
 
     # Parallel data fetch
     (
@@ -1759,13 +1762,13 @@ async def get_dashboard_kpis(period: int = 30, current_user: dict = Depends(get_
         overdue_tasks_raw,
         churn_risk_count,
     ) = await asyncio.gather(  # type: ignore[assignment]
-        db.leads.count_documents({"user_id": uid}),
-        db.leads.count_documents({"user_id": uid, "created_at": {"$gte": period_start_iso}}),
+        db.leads.count_documents({"org_id": uid}),
+        db.leads.count_documents({"org_id": uid, "created_at": {"$gte": period_start_iso}}),
         db.clients.count_documents({"org_id": uid, "status": "ativo"}),
         db.deals.find(active_deal_q, {"_id": 0}).to_list(500),
-        db.leads.find({"user_id": uid}, {"_id": 0}).sort("created_at", -1).to_list(8),
+        db.leads.find({"org_id": uid}, {"_id": 0}).sort("created_at", -1).to_list(8),
         db.leads.aggregate([
-            {"$match": {"user_id": uid}},
+            {"$match": {"org_id": uid}},
             {"$group": {"_id": "$source", "count": {"$sum": 1}}},
             {"$sort": {"count": -1}},
         ]).to_list(10),
@@ -1774,7 +1777,7 @@ async def get_dashboard_kpis(period: int = 30, current_user: dict = Depends(get_
             {"$group": {"_id": None, "total": {"$sum": "$monthly_value"}}},
         ]).to_list(1),
         db.operational_tasks.find({
-            "user_id": uid,
+            "client_id": {"$in": org_client_ids},
             "status": {"$nin": ["DONE"]},
             "due_date": {"$lt": today_str, "$ne": None},
             "$or": [{"deleted_at": {"$exists": False}}, {"deleted_at": None}],
