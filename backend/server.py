@@ -515,7 +515,7 @@ async def logout(response: Response):
 
 class OrgInviteRequest(BaseModel):
     email: str = Field(..., max_length=255)
-    name: str = Field(..., max_length=255)
+    name: str = Field("", max_length=255)
     role: str = "member"
 
 @api_router.get("/org/me")

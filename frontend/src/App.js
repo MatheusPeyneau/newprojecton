@@ -17,6 +17,7 @@ import ClientTaskDashboard from "@/pages/operacional/ClientTaskDashboard";
 import RH from "@/pages/rh/RH";
 import Configuracoes from "@/pages/configuracoes/Configuracoes";
 import Whatsapp from "@/pages/whatsapp/Whatsapp";
+import AceitarConvite from "@/pages/AceitarConvite";
 import "@/App.css";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -31,6 +32,7 @@ function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/aceitar-convite" element={<AceitarConvite />} />
       <Route
         path="/"
         element={

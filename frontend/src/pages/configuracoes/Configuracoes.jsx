@@ -432,6 +432,7 @@ function MembersSection({ currentUser }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [role, setRole] = useState("member");
   const [inviting, setInviting] = useState(false);
   const [removingId, setRemovingId] = useState(null);
@@ -452,9 +453,13 @@ function MembersSection({ currentUser }) {
     if (!email.trim()) return;
     setInviting(true);
     try {
-      await axios.post(`${API}/org/members/invite`, { email: email.trim(), role }, { headers: getAuthHeader() });
-      toast.success(`Convite enviado para ${email}`);
+      const res = await axios.post(`${API}/org/members/invite`, { email: email.trim(), name: name.trim(), role }, { headers: getAuthHeader() });
+      const token = res.data.invite_token;
+      const link = `${window.location.origin}/aceitar-convite?token=${token}`;
+      await navigator.clipboard.writeText(link).catch(() => {});
+      toast.success(`Convite criado! Link copiado: ${link}`, { duration: 8000 });
       setEmail("");
+      setName("");
       await loadMembers();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Erro ao enviar convite");
@@ -538,6 +543,12 @@ function MembersSection({ currentUser }) {
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.1em] mb-3">Convidar novo membro</p>
           <div className="flex gap-2 flex-wrap">
             <Input
+              placeholder="Nome do funcionário"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="flex-1 min-w-[160px] text-sm"
+            />
+            <Input
               placeholder="email@agencia.com"
               value={email}
               onChange={e => setEmail(e.target.value)}
@@ -559,7 +570,7 @@ function MembersSection({ currentUser }) {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            O convidado receberá um link para criar a conta já vinculada à sua organização.
+            Após clicar em Convidar, o link de aceite será copiado automaticamente para a área de transferência. Envie para o funcionário.
           </p>
         </div>
       )}
