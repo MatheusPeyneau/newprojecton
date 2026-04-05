@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard,
   Users,
@@ -14,30 +15,41 @@ import {
   X,
   ChevronDown,
   Building2,
+  ShieldCheck,
 } from "lucide-react";
 
-const navItems = [
-  { label: "Dashboard",    icon: LayoutDashboard, href: "/dashboard",       testId: "nav-dashboard" },
+const allNavItems = [
+  { label: "Dashboard",    icon: LayoutDashboard, href: "/dashboard",       testId: "nav-dashboard",     module: null },
   {
-    label: "Comercial", icon: Kanban, testId: "nav-comercial",
+    label: "Comercial", icon: Kanban, testId: "nav-comercial", module: null,
     children: [
-      { label: "Leads",    href: "/comercial/leads",    testId: "nav-leads" },
-      { label: "Pipeline", href: "/comercial/pipeline", testId: "nav-pipeline" },
+      { label: "Leads",    href: "/comercial/leads",    testId: "nav-leads",    module: "leads" },
+      { label: "Pipeline", href: "/comercial/pipeline", testId: "nav-pipeline", module: "pipeline" },
     ],
   },
-  { label: "Clientes",     icon: Users,           href: "/clientes",        testId: "nav-clientes" },
-  { label: "Financeiro",   icon: DollarSign,      href: "/financeiro",      testId: "nav-financeiro" },
-  { label: "Operacional",  icon: ClipboardList,   href: "/operacional",     testId: "nav-operacional" },
-  { label: "Conteúdo",     icon: Image,           href: "/conteudo",        testId: "nav-conteudo" },
-  { label: "WhatsApp",     icon: MessageCircle,   href: "/whatsapp",        testId: "nav-whatsapp" },
-  { label: "RH",           icon: UserCog,         href: "/rh",              testId: "nav-rh" },
-  { label: "Configurações",icon: Settings,        href: "/configuracoes",   testId: "nav-configuracoes" },
+  { label: "Clientes",     icon: Users,           href: "/clientes",        testId: "nav-clientes",      module: "clientes" },
+  { label: "Financeiro",   icon: DollarSign,      href: "/financeiro",      testId: "nav-financeiro",    module: "financeiro" },
+  { label: "Operacional",  icon: ClipboardList,   href: "/operacional",     testId: "nav-operacional",   module: "operacional" },
+  { label: "Conteúdo",     icon: Image,           href: "/conteudo",        testId: "nav-conteudo",      module: "conteudo" },
+  { label: "WhatsApp",     icon: MessageCircle,   href: "/whatsapp",        testId: "nav-whatsapp",      module: "whatsapp" },
+  { label: "RH",           icon: UserCog,         href: "/rh",              testId: "nav-rh",            module: "rh" },
+  { label: "Configurações",icon: Settings,        href: "/configuracoes",   testId: "nav-configuracoes", module: null },
 ];
 
-function NavItem({ item, onClose }) {
+function hasAccess(item, user) {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  if (!item.module) return true; // Dashboard, Configurações always visible
+  const perms = user.permissions || [];
+  return perms.includes(item.module);
+}
+
+function NavItem({ item, onClose, user }) {
   const [open, setOpen] = useState(true);
 
   if (item.children) {
+    const visibleChildren = item.children.filter(c => hasAccess(c, user));
+    if (visibleChildren.length === 0) return null;
     return (
       <div>
         <button
@@ -60,18 +72,13 @@ function NavItem({ item, onClose }) {
             className="mt-1 ml-4 space-y-0.5"
             style={{ paddingLeft: "12px", borderLeft: "1px solid hsl(var(--sidebar-border))" }}
           >
-            {item.children.map(child => (
+            {visibleChildren.map(child => (
               <NavLink
                 key={child.href}
                 to={child.href}
                 onClick={onClose}
                 data-testid={child.testId}
-                className={({ isActive }) =>
-                  cn(
-                    "nav-item",
-                    isActive && "nav-item-active"
-                  )
-                }
+                className={({ isActive }) => cn("nav-item", isActive && "nav-item-active")}
                 style={{ fontSize: "13.5px" }}
               >
                 {child.label}
@@ -82,6 +89,8 @@ function NavItem({ item, onClose }) {
       </div>
     );
   }
+
+  if (!hasAccess(item, user)) return null;
 
   return (
     <NavLink
@@ -97,6 +106,11 @@ function NavItem({ item, onClose }) {
 }
 
 export default function Sidebar({ onClose }) {
+  const { user } = useAuth();
+
+  const adminEmails = (process.env.REACT_APP_ADMIN_EMAILS || "").split(",").map(e => e.trim()).filter(Boolean);
+  const isSuperAdmin = user && adminEmails.includes(user.email);
+
   return (
     <div
       className="flex flex-col h-full"
@@ -145,9 +159,20 @@ export default function Sidebar({ onClose }) {
         className="flex-1 overflow-y-auto scrollbar-hidden"
         style={{ padding: "12px 10px", display: "flex", flexDirection: "column", gap: "2px" }}
       >
-        {navItems.map(item => (
-          <NavItem key={item.testId} item={item} onClose={onClose} />
+        {allNavItems.map(item => (
+          <NavItem key={item.testId} item={item} onClose={onClose} user={user} />
         ))}
+        {isSuperAdmin && (
+          <NavLink
+            to="/admin"
+            onClick={onClose}
+            data-testid="nav-admin"
+            className={({ isActive }) => cn("nav-item", isActive && "nav-item-active")}
+          >
+            <ShieldCheck size={18} strokeWidth={1.75} className="shrink-0" />
+            <span>Admin</span>
+          </NavLink>
+        )}
       </nav>
 
       {/* Footer */}

@@ -513,10 +513,25 @@ async def logout(response: Response):
 
 # ============= ORG ENDPOINTS =============
 
+ALL_MODULES = ["leads", "pipeline", "clientes", "financeiro", "conteudo", "operacional", "rh", "whatsapp"]
+
 class OrgInviteRequest(BaseModel):
     email: str = Field(..., max_length=255)
     name: str = Field("", max_length=255)
     role: str = "member"
+    permissions: List[str] = ALL_MODULES
+
+class MemberPermissionsUpdate(BaseModel):
+    permissions: List[str]
+
+class AdminOrgUpdate(BaseModel):
+    plan: Optional[str] = None
+    plan_status: Optional[str] = None
+
+def _check_super_admin(current_user: dict):
+    admin_emails = [e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+    if current_user["email"] not in admin_emails:
+        raise HTTPException(status_code=403, detail="Acesso restrito")
 
 @api_router.get("/org/me")
 async def get_org(current_user: dict = Depends(get_current_user)):
@@ -552,6 +567,7 @@ async def invite_member(body: OrgInviteRequest, current_user: dict = Depends(get
         "password_hash": "",
         "picture": None,
         "role": body.role if body.role in ("admin", "member") else "member",
+        "permissions": ALL_MODULES if body.role == "admin" else body.permissions,
         "invite_token": invite_token,
         "invite_expires_at": (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat(),
         "active": False,
@@ -596,6 +612,48 @@ async def remove_member(user_id: str, current_user: dict = Depends(get_current_u
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Membro não encontrado na sua organização")
     return {"message": "Membro removido com sucesso"}
+
+
+@api_router.put("/org/members/{user_id}/permissions")
+async def update_member_permissions(user_id: str, body: MemberPermissionsUpdate, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Apenas administradores podem editar permissões")
+    member = await db.users.find_one({"user_id": user_id, "org_id": current_user["org_id"]}, {"_id": 0})
+    if not member:
+        raise HTTPException(status_code=404, detail="Membro não encontrado")
+    if member.get("role") == "admin":
+        raise HTTPException(status_code=400, detail="Permissões de admins não podem ser editadas")
+    valid = [p for p in body.permissions if p in ALL_MODULES]
+    await db.users.update_one({"user_id": user_id}, {"$set": {"permissions": valid}})
+    return {"user_id": user_id, "permissions": valid}
+
+
+# ============= ADMIN ENDPOINTS =============
+
+@api_router.get("/admin/orgs")
+async def admin_list_orgs(current_user: dict = Depends(get_current_user)):
+    _check_super_admin(current_user)
+    orgs = await db.orgs.find({}, {"_id": 0}).to_list(1000)
+    result = []
+    for org in orgs:
+        org["_user_count"] = await db.users.count_documents({"org_id": org["org_id"]})
+        org["_client_count"] = await db.clients.count_documents({"org_id": org["org_id"]})
+        org["_lead_count"] = await db.leads.count_documents({"org_id": org["org_id"]})
+        result.append(org)
+    return result
+
+
+@api_router.put("/admin/orgs/{org_id}")
+async def admin_update_org(org_id: str, body: AdminOrgUpdate, current_user: dict = Depends(get_current_user)):
+    _check_super_admin(current_user)
+    update = {}
+    if body.plan and body.plan in ("free", "starter", "pro"):
+        update["plan"] = body.plan
+    if body.plan_status and body.plan_status in ("active", "inactive"):
+        update["plan_status"] = body.plan_status
+    if update:
+        await db.orgs.update_one({"org_id": org_id}, {"$set": update}, upsert=True)
+    return await db.orgs.find_one({"org_id": org_id}, {"_id": 0})
 
 
 # ============= LEADS ENDPOINTS =============

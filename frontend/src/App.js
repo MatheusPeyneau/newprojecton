@@ -18,6 +18,7 @@ import RH from "@/pages/rh/RH";
 import Configuracoes from "@/pages/configuracoes/Configuracoes";
 import Whatsapp from "@/pages/whatsapp/Whatsapp";
 import AceitarConvite from "@/pages/AceitarConvite";
+import Admin from "@/pages/admin/Admin";
 import "@/App.css";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -53,6 +54,7 @@ function AppRouter() {
         <Route path="rh" element={<RH />} />
         <Route path="whatsapp" element={<Whatsapp />} />
         <Route path="configuracoes" element={<Configuracoes />} />
+        <Route path="admin" element={<Admin />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

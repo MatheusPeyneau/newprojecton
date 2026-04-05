@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Settings, Sun, Moon, Globe, Bot, Zap, FlaskConical, CheckCircle2, XCircle, Loader2, Sparkles, Key, Eye, EyeOff, Save, MessageCircle, Copy, CheckCheck, CalendarClock, Share2, Instagram, Users, UserPlus, Trash2, Crown, User } from "lucide-react";
+import { Settings, Sun, Moon, Globe, Bot, Zap, FlaskConical, CheckCircle2, XCircle, Loader2, Sparkles, Key, Eye, EyeOff, Save, MessageCircle, Copy, CheckCheck, CalendarClock, Share2, Instagram, Users, UserPlus, Trash2, Crown, User, ChevronDown, ChevronRight, Shield } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 function getAuthHeader() {
@@ -428,6 +428,17 @@ function ApiKeysSection() {
   );
 }
 
+const ALL_MODULES = [
+  { key: "leads",       label: "Leads" },
+  { key: "pipeline",    label: "Pipeline" },
+  { key: "clientes",    label: "Clientes" },
+  { key: "financeiro",  label: "Financeiro" },
+  { key: "conteudo",    label: "Conteúdo" },
+  { key: "operacional", label: "Operacional" },
+  { key: "rh",          label: "RH" },
+  { key: "whatsapp",    label: "WhatsApp" },
+];
+
 function MembersSection({ currentUser }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -436,6 +447,9 @@ function MembersSection({ currentUser }) {
   const [role, setRole] = useState("member");
   const [inviting, setInviting] = useState(false);
   const [removingId, setRemovingId] = useState(null);
+  const [editingPerms, setEditingPerms] = useState(null); // user_id being edited
+  const [permEdits, setPermEdits] = useState({});
+  const [savingPerms, setSavingPerms] = useState(false);
 
   const isAdmin = currentUser?.role === "admin";
 
@@ -457,9 +471,8 @@ function MembersSection({ currentUser }) {
       const token = res.data.invite_token;
       const link = `${window.location.origin}/aceitar-convite?token=${token}`;
       await navigator.clipboard.writeText(link).catch(() => {});
-      toast.success(`Convite criado! Link copiado: ${link}`, { duration: 8000 });
-      setEmail("");
-      setName("");
+      toast.success(`Convite criado! Link copiado para área de transferência.`, { duration: 6000 });
+      setEmail(""); setName("");
       await loadMembers();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Erro ao enviar convite");
@@ -480,55 +493,113 @@ function MembersSection({ currentUser }) {
     setRemovingId(null);
   };
 
-  return (
-    <div className="bg-card border border-border rounded-lg p-5 mb-4">
-      <h2 className="text-sm font-heading font-semibold mb-1 flex items-center gap-2">
-        <Users size={16} />
-        Membros da Organização
-      </h2>
-      <p className="text-xs text-muted-foreground mb-4">
-        Gerencie quem tem acesso à sua organização e suas permissões.
-      </p>
+  const openPermEditor = (member) => {
+    setEditingPerms(member.user_id);
+    setPermEdits({ [member.user_id]: member.permissions || ALL_MODULES.map(m => m.key) });
+  };
 
+  const togglePerm = (userId, moduleKey) => {
+    setPermEdits(prev => {
+      const current = prev[userId] || [];
+      const has = current.includes(moduleKey);
+      return { ...prev, [userId]: has ? current.filter(k => k !== moduleKey) : [...current, moduleKey] };
+    });
+  };
+
+  const savePerms = async (userId) => {
+    setSavingPerms(true);
+    try {
+      await axios.put(`${API}/org/members/${userId}/permissions`, { permissions: permEdits[userId] || [] }, { headers: getAuthHeader() });
+      toast.success("Permissões salvas");
+      setMembers(prev => prev.map(m => m.user_id === userId ? { ...m, permissions: permEdits[userId] } : m));
+      setEditingPerms(null);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erro ao salvar permissões");
+    }
+    setSavingPerms(false);
+  };
+
+  return (
+    <div className="space-y-3">
       {/* Member list */}
       {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
           <Loader2 size={13} className="animate-spin" /> Carregando membros...
         </div>
       ) : (
-        <div className="space-y-2 mb-5">
+        <div className="space-y-2">
           {members.map(m => (
-            <div key={m.user_id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-              <div className="flex items-center gap-3">
-                <div className="p-1.5 bg-background rounded-md border border-border">
-                  {m.role === "admin" ? <Crown size={13} className="text-amber-500" /> : <User size={13} className="text-muted-foreground" />}
+            <div key={m.user_id} className="border border-border rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between p-3 bg-muted/20">
+                <div className="flex items-center gap-3">
+                  <div className="p-1.5 bg-background rounded-md border border-border">
+                    {m.role === "admin" ? <Crown size={13} className="text-amber-500" /> : <User size={13} className="text-muted-foreground" />}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{m.name || m.email}</p>
+                    <p className="text-xs text-muted-foreground">{m.email}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium">{m.name || m.email}</p>
-                  <p className="text-xs text-muted-foreground">{m.email}</p>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    m.role === "admin"
+                      ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                      : "bg-muted text-muted-foreground"
+                  }`}>
+                    {m.role === "admin" ? "Admin" : "Membro"}
+                  </span>
+                  {isAdmin && m.role !== "admin" && (
+                    <button
+                      onClick={() => editingPerms === m.user_id ? setEditingPerms(null) : openPermEditor(m)}
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                      title="Editar permissões"
+                    >
+                      <Shield size={13} />
+                    </button>
+                  )}
+                  {isAdmin && m.user_id !== currentUser?.user_id && (
+                    <button
+                      onClick={() => handleRemove(m.user_id)}
+                      disabled={removingId === m.user_id}
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      title="Remover membro"
+                    >
+                      {removingId === m.user_id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  m.role === "admin"
-                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                    : "bg-muted text-muted-foreground"
-                }`}>
-                  {m.role === "admin" ? "Admin" : "Membro"}
-                </span>
-                {isAdmin && m.user_id !== currentUser?.user_id && (
-                  <button
-                    onClick={() => handleRemove(m.user_id)}
-                    disabled={removingId === m.user_id}
-                    className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                    title="Remover membro"
-                  >
-                    {removingId === m.user_id
-                      ? <Loader2 size={13} className="animate-spin" />
-                      : <Trash2 size={13} />}
-                  </button>
-                )}
-              </div>
+
+              {/* Permission editor */}
+              {editingPerms === m.user_id && (
+                <div className="border-t border-border p-3 bg-background">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.1em] mb-3">Módulos com acesso</p>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {ALL_MODULES.map(mod => {
+                      const enabled = (permEdits[m.user_id] || []).includes(mod.key);
+                      return (
+                        <button
+                          key={mod.key}
+                          onClick={() => togglePerm(m.user_id, mod.key)}
+                          className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                            enabled
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border text-muted-foreground hover:border-primary/40"
+                          }`}
+                        >
+                          {mod.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => savePerms(m.user_id)} disabled={savingPerms} className="h-7 text-xs">
+                      {savingPerms ? <Loader2 size={12} className="animate-spin" /> : "Salvar permissões"}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditingPerms(null)} className="h-7 text-xs">Cancelar</Button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
           {members.length === 0 && (
@@ -542,36 +613,17 @@ function MembersSection({ currentUser }) {
         <div className="border-t border-border pt-4">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.1em] mb-3">Convidar novo membro</p>
           <div className="flex gap-2 flex-wrap">
-            <Input
-              placeholder="Nome do funcionário"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              className="flex-1 min-w-[160px] text-sm"
-            />
-            <Input
-              placeholder="email@agencia.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleInvite()}
-              className="flex-1 min-w-[200px] text-sm"
-            />
-            <select
-              value={role}
-              onChange={e => setRole(e.target.value)}
-              className="px-3 py-2 rounded-md border border-border bg-background text-sm text-foreground"
-            >
+            <Input placeholder="Nome" value={name} onChange={e => setName(e.target.value)} className="flex-1 min-w-[140px] text-sm" />
+            <Input placeholder="email@agencia.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleInvite()} className="flex-1 min-w-[180px] text-sm" />
+            <select value={role} onChange={e => setRole(e.target.value)} className="px-3 py-2 rounded-md border border-border bg-background text-sm text-foreground">
               <option value="member">Membro</option>
               <option value="admin">Admin</option>
             </select>
             <Button onClick={handleInvite} disabled={inviting || !email.trim()} className="gap-2">
-              {inviting
-                ? <><Loader2 size={14} className="animate-spin" />Enviando...</>
-                : <><UserPlus size={14} />Convidar</>}
+              {inviting ? <><Loader2 size={14} className="animate-spin" />Enviando...</> : <><UserPlus size={14} />Convidar</>}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Após clicar em Convidar, o link de aceite será copiado automaticamente para a área de transferência. Envie para o funcionário.
-          </p>
+          <p className="text-xs text-muted-foreground mt-2">O link de aceite será copiado automaticamente. Envie para o funcionário.</p>
         </div>
       )}
     </div>
@@ -714,6 +766,25 @@ function InstagramApiSection() {
   );
 }
 
+function Accordion({ title, icon: Icon, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-card border border-border rounded-lg mb-4 overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/30 transition-colors"
+      >
+        <span className="text-sm font-heading font-semibold flex items-center gap-2">
+          <Icon size={16} />
+          {title}
+        </span>
+        {open ? <ChevronDown size={16} className="text-muted-foreground" /> : <ChevronRight size={16} className="text-muted-foreground" />}
+      </button>
+      {open && <div className="px-5 pb-5">{children}</div>}
+    </div>
+  );
+}
+
 export default function Configuracoes() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -747,109 +818,49 @@ export default function Configuracoes() {
         </div>
       </div>
 
-      {/* Members */}
-      <MembersSection currentUser={user} />
+      {/* Accordion — Gerenciar Membros */}
+      <Accordion title="Gerenciar Membros" icon={Users} defaultOpen={user?.role === "admin"}>
+        <MembersSection currentUser={user} />
+      </Accordion>
 
-      {/* Appearance */}
-      <div className="bg-card border border-border rounded-lg p-5 mb-4">
-        <h2 className="text-sm font-heading font-semibold mb-4 flex items-center gap-2">
-          <Sun size={16} />
-          Aparência
-        </h2>
-        <div className="flex gap-3">
-          {[
-            { value: "light", label: "Claro", icon: Sun },
-            { value: "dark", label: "Escuro", icon: Moon },
-          ].map((t) => (
-            <button
-              key={t.value}
-              onClick={() => setTheme(t.value)}
-              className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border text-sm font-medium transition-all ${
-                theme === t.value ? "border-primary bg-primary/5 text-primary" : "border-border hover:bg-muted"
-              }`}
-              data-testid={`theme-${t.value}-button`}
-            >
-              <t.icon size={15} />
-              {t.label}
-            </button>
-          ))}
+      {/* Accordion — Integrações */}
+      <Accordion title="Integrações" icon={Globe} defaultOpen={false}>
+        {/* Appearance */}
+        <div className="mb-5">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.1em] mb-3 flex items-center gap-2"><Sun size={13} />Aparência</p>
+          <div className="flex gap-3">
+            {[{ value: "light", label: "Claro", icon: Sun }, { value: "dark", label: "Escuro", icon: Moon }].map((t) => (
+              <button
+                key={t.value}
+                onClick={() => setTheme(t.value)}
+                className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border text-sm font-medium transition-all ${theme === t.value ? "border-primary bg-primary/5 text-primary" : "border-border hover:bg-muted"}`}
+                data-testid={`theme-${t.value}-button`}
+              >
+                <t.icon size={15} />{t.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* N8N Client Webhook */}
-      <WebhookSection
-        title="N8N — Webhook de Clientes"
-        icon={Globe}
-        description="Ao cadastrar um novo cliente, envia automaticamente um POST JSON para o N8N com os dados de cobrança."
-        settingKey="client"
-        payloadPreview={`{
-  "name": "Nome do Cliente",
-  "cpfCnpj": "00000000000000",
-  "email": "cliente@exemplo.com",
-  "mobilePhone": "11999999999",
-  "billingType": "BOLETO",
-  "value": 500.00,
-  "dueDate": "2025-12-01"
-}`}
-      />
-
-      {/* N8N Carousel Webhook */}
-      <WebhookSection
-        title="N8N — Webhook de Carrossel"
-        icon={Sparkles}
-        description="Usado na aba Conteúdo para gerar carrosséis. Envia dados do cliente (nicho + notas) ao N8N e recebe os slides gerados."
-        settingKey="carousel"
-        payloadPreview={`{
-  "jobId": "job_abc123",
-  "clientId": "uuid",
-  "clientName": "Nome do Cliente",
-  "niche": "Empresa / Segmento",
-  "notes": "Notas do nicho...",
-  "email": "cliente@exemplo.com",
-  "requestedAt": "2025-01-01T00:00:00Z"
-}`}
-      />
-
-      {/* WhatsApp Webhook */}
-      <WhatsAppWebhookSection />
-
-      {/* Meeting Webhook */}
-      <MeetingWebhookSection />
-
-      {/* Instagram API */}
-      <InstagramApiSection />
-
-      {/* API Keys for Multi-Agent */}
-      <ApiKeysSection />
-
-      {/* AI Integrations */}
-      <div className="bg-card border border-border rounded-lg p-5">
-        <h2 className="text-sm font-heading font-semibold mb-4 flex items-center gap-2">
-          <Bot size={16} />
-          Integrações de IA (pré-configuradas)
-        </h2>
-        <div className="space-y-3">
-          {[
-            { icon: Bot, label: "Anthropic Claude", desc: "Qualificação de leads e geração de conteúdo", status: "Configurado" },
-            { icon: Zap, label: "Google Gemini", desc: "IA complementar via Emergent LLM Key", status: "Configurado" },
-          ].map((item) => (
-            <div key={item.label} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-              <div className="flex items-center gap-3">
-                <div className="p-1.5 bg-background rounded-md border border-border">
-                  <item.icon size={14} className="text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{item.label}</p>
-                  <p className="text-xs text-muted-foreground">{item.desc}</p>
-                </div>
-              </div>
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
-                {item.status}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
+        <WebhookSection
+          title="N8N — Webhook de Clientes"
+          icon={Globe}
+          description="Ao cadastrar um novo cliente, envia automaticamente um POST JSON para o N8N com os dados de cobrança."
+          settingKey="client"
+          payloadPreview={`{\n  "name": "Nome do Cliente",\n  "cpfCnpj": "00000000000000",\n  "email": "cliente@exemplo.com",\n  "mobilePhone": "11999999999",\n  "billingType": "BOLETO",\n  "value": 500.00,\n  "dueDate": "2025-12-01"\n}`}
+        />
+        <WebhookSection
+          title="N8N — Webhook de Carrossel"
+          icon={Sparkles}
+          description="Usado na aba Conteúdo para gerar carrosséis. Envia dados do cliente (nicho + notas) ao N8N e recebe os slides gerados."
+          settingKey="carousel"
+          payloadPreview={`{\n  "jobId": "job_abc123",\n  "clientId": "uuid",\n  "clientName": "Nome do Cliente",\n  "niche": "Empresa / Segmento",\n  "notes": "Notas do nicho...",\n  "email": "cliente@exemplo.com",\n  "requestedAt": "2025-01-01T00:00:00Z"\n}`}
+        />
+        <WhatsAppWebhookSection />
+        <MeetingWebhookSection />
+        <InstagramApiSection />
+        <ApiKeysSection />
+      </Accordion>
     </div>
   );
 }
