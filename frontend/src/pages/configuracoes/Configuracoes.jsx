@@ -769,18 +769,25 @@ function InstagramApiSection() {
 function Accordion({ title, icon: Icon, defaultOpen = false, children }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="bg-card border border-border rounded-lg mb-4 overflow-hidden">
+    <div className="mb-4">
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/30 transition-colors"
+        className="w-full flex items-center gap-2 px-1 py-2 rounded-md hover:bg-muted/40 transition-colors text-left"
       >
-        <span className="text-sm font-heading font-semibold flex items-center gap-2">
-          <Icon size={16} />
-          {title}
-        </span>
-        {open ? <ChevronDown size={16} className="text-muted-foreground" /> : <ChevronRight size={16} className="text-muted-foreground" />}
+        <Icon size={16} className="shrink-0 text-muted-foreground" />
+        <span className="flex-1 text-sm font-heading font-semibold">{title}</span>
+        <ChevronDown
+          size={14}
+          strokeWidth={2}
+          className="text-muted-foreground shrink-0"
+          style={{ transition: "transform 0.2s ease", transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
+        />
       </button>
-      {open && <div className="px-5 pb-5">{children}</div>}
+      {open && (
+        <div className="mt-2 ml-4 space-y-0" style={{ paddingLeft: "12px", borderLeft: "1px solid hsl(var(--border))" }}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
