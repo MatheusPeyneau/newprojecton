@@ -33,7 +33,13 @@ const allNavItems = [
   { label: "Conteúdo",     icon: Image,           href: "/conteudo",        testId: "nav-conteudo",      module: "conteudo" },
   { label: "WhatsApp",     icon: MessageCircle,   href: "/whatsapp",        testId: "nav-whatsapp",      module: "whatsapp" },
   { label: "RH",           icon: UserCog,         href: "/rh",              testId: "nav-rh",            module: "rh" },
-  { label: "Configurações",icon: Settings,        href: "/configuracoes",   testId: "nav-configuracoes", module: null },
+  {
+    label: "Configurações", icon: Settings, testId: "nav-configuracoes", module: null,
+    children: [
+      { label: "Área de Membros", href: "/configuracoes/membros",    testId: "nav-membros",     module: null },
+      { label: "Integrações",     href: "/configuracoes/integracoes", testId: "nav-integracoes", module: null },
+    ],
+  },
 ];
 
 function hasAccess(item, user) {

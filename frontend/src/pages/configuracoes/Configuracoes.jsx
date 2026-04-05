@@ -15,7 +15,7 @@ function getAuthHeader() {
   return { Authorization: `Bearer ${localStorage.getItem("agenciaos_token")}` };
 }
 
-function WebhookSection({ title, icon: Icon, description, settingKey, testLabel, payloadPreview }) {
+export function WebhookSection({ title, icon: Icon, description, settingKey, testLabel, payloadPreview }) {
   const [url, setUrl] = useState("");
   const [enabled, setEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -135,7 +135,7 @@ function WebhookSection({ title, icon: Icon, description, settingKey, testLabel,
   );
 }
 
-function WhatsAppWebhookSection() {
+export function WhatsAppWebhookSection() {
   const backendUrl = process.env.REACT_APP_BACKEND_URL || "";
   const inboundUrl = `${backendUrl}/api/webhook/whatsapp-lead`;
   const [copied, setCopied] = useState(false);
@@ -225,7 +225,7 @@ function WhatsAppWebhookSection() {
   );
 }
 
-function MeetingWebhookSection() {
+export function MeetingWebhookSection() {
   const [url, setUrl] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -294,7 +294,7 @@ function MeetingWebhookSection() {
   );
 }
 
-function ApiKeysSection() {
+export function ApiKeysSection() {
   const PROVIDERS = [
     { value: "perplexity", label: "Perplexity", placeholder: "pplx-..." },
     { value: "openai", label: "OpenAI", placeholder: "sk-..." },
@@ -439,7 +439,7 @@ const ALL_MODULES = [
   { key: "whatsapp",    label: "WhatsApp" },
 ];
 
-function MembersSection({ currentUser }) {
+export function MembersSection({ currentUser }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
@@ -630,7 +630,7 @@ function MembersSection({ currentUser }) {
   );
 }
 
-function InstagramApiSection() {
+export function InstagramApiSection() {
   const backendUrl = process.env.REACT_APP_BACKEND_URL || "";
   const webhookUrl = `${backendUrl}/api/webhook/instagram`;
   const [copiedWebhook, setCopiedWebhook] = useState(false);

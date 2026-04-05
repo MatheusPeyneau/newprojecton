@@ -15,7 +15,8 @@ import Conteudo from "@/pages/conteudo/Conteudo";
 import Operacional from "@/pages/operacional/Operacional";
 import ClientTaskDashboard from "@/pages/operacional/ClientTaskDashboard";
 import RH from "@/pages/rh/RH";
-import Configuracoes from "@/pages/configuracoes/Configuracoes";
+import ConfiguracoesMembros from "@/pages/configuracoes/ConfiguracoesMembros";
+import ConfiguracoesIntegracoes from "@/pages/configuracoes/ConfiguracoesIntegracoes";
 import Whatsapp from "@/pages/whatsapp/Whatsapp";
 import AceitarConvite from "@/pages/AceitarConvite";
 import Admin from "@/pages/admin/Admin";
@@ -53,7 +54,9 @@ function AppRouter() {
         <Route path="operacional/:clientId" element={<ClientTaskDashboard />} />
         <Route path="rh" element={<RH />} />
         <Route path="whatsapp" element={<Whatsapp />} />
-        <Route path="configuracoes" element={<Configuracoes />} />
+        <Route path="configuracoes" element={<Navigate to="/configuracoes/membros" replace />} />
+        <Route path="configuracoes/membros" element={<ConfiguracoesMembros />} />
+        <Route path="configuracoes/integracoes" element={<ConfiguracoesIntegracoes />} />
         <Route path="admin" element={<Admin />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
