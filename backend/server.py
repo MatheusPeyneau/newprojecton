@@ -1846,28 +1846,31 @@ async def get_dashboard_kpis(period: int = 30, current_user: dict = Depends(get_
 
 @api_router.post("/ai/qualify-lead")
 async def qualify_lead(body: AIRequest, current_user: dict = Depends(get_current_user)):
-    """Pre-configured AI endpoint for lead qualification using Anthropic/Gemini"""
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    """Pre-configured AI endpoint for lead qualification using OpenAI"""
+    import openai
 
-    llm_key = os.environ.get("EMERGENT_LLM_KEY", "")
-    if not llm_key:
-        return {"qualification": "IA não configurada. Configure EMERGENT_LLM_KEY.", "score": 50}
+    api_key = await _get_api_key(current_user["org_id"], "openai")
+    if not api_key:
+        return {"qualification": "IA não configurada. Configure a chave OpenAI nas configurações.", "score": 50}
 
     try:
-        chat = LlmChat(
-            api_key=llm_key,
-            session_id=f"qualify_{uuid.uuid4().hex[:8]}",
-            system_message=(
-                "Você é um especialista em qualificação de leads para agências de marketing digital. "
-                "Analise as informações do lead e forneça: 1) Score de 0-100, 2) Potencial do lead, "
-                "3) Próximos passos recomendados. Responda sempre em português brasileiro."
-            ),
-        )
+        client = openai.AsyncOpenAI(api_key=api_key)
         prompt = f"Qualifique este lead: {body.prompt}"
         if body.context:
             prompt += f"\n\nContexto adicional: {body.context}"
-        response = await chat.send_message(UserMessage(content=prompt))
-        return {"qualification": response, "status": "success"}
+        resp = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": (
+                    "Você é um especialista em qualificação de leads para agências de marketing digital. "
+                    "Analise as informações do lead e forneça: 1) Score de 0-100, 2) Potencial do lead, "
+                    "3) Próximos passos recomendados. Responda sempre em português brasileiro."
+                )},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=1000,
+        )
+        return {"qualification": resp.choices[0].message.content, "status": "success"}
     except Exception as e:
         logger.error(f"AI qualification error: {e}")
         return {"qualification": "Erro ao processar com IA", "error": str(e)}
@@ -1875,25 +1878,28 @@ async def qualify_lead(body: AIRequest, current_user: dict = Depends(get_current
 
 @api_router.post("/ai/generate-content")
 async def generate_content(body: AIRequest, current_user: dict = Depends(get_current_user)):
-    """Pre-configured AI endpoint for content generation using Anthropic/Gemini"""
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    """Pre-configured AI endpoint for content generation using OpenAI"""
+    import openai
 
-    llm_key = os.environ.get("EMERGENT_LLM_KEY", "")
-    if not llm_key:
-        return {"content": "IA não configurada. Configure EMERGENT_LLM_KEY.", "status": "not_configured"}
+    api_key = await _get_api_key(current_user["org_id"], "openai")
+    if not api_key:
+        return {"content": "IA não configurada. Configure a chave OpenAI nas configurações.", "status": "not_configured"}
 
     try:
-        chat = LlmChat(
-            api_key=llm_key,
-            session_id=f"content_{uuid.uuid4().hex[:8]}",
-            system_message=(
-                "Você é um especialista em marketing de conteúdo para redes sociais brasileiras. "
-                "Crie conteúdo criativo, engajante e alinhado com as tendências do mercado. "
-                "Responda sempre em português brasileiro."
-            ),
+        client = openai.AsyncOpenAI(api_key=api_key)
+        resp = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": (
+                    "Você é um especialista em marketing de conteúdo para redes sociais brasileiras. "
+                    "Crie conteúdo criativo, engajante e alinhado com as tendências do mercado. "
+                    "Responda sempre em português brasileiro."
+                )},
+                {"role": "user", "content": body.prompt},
+            ],
+            max_tokens=1000,
         )
-        response = await chat.send_message(UserMessage(content=body.prompt))
-        return {"content": response, "status": "success"}
+        return {"content": resp.choices[0].message.content, "status": "success"}
     except Exception as e:
         logger.error(f"AI content error: {e}")
         return {"content": "Erro ao gerar conteúdo", "error": str(e)}
