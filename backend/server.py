@@ -1700,7 +1700,7 @@ async def get_mrr_trend(current_user: dict = Depends(get_current_user)):
     """Return cumulative MRR snapshot for each of the last 6 months."""
     now = datetime.now(timezone.utc)
     clients = await db.clients.find(
-        {"status": "ativo"},
+        {"org_id": current_user["org_id"], "status": "ativo"},
         {"_id": 0, "monthly_value": 1, "created_at": 1},
     ).to_list(500)
 
@@ -1761,7 +1761,7 @@ async def get_dashboard_kpis(period: int = 30, current_user: dict = Depends(get_
     ) = await asyncio.gather(  # type: ignore[assignment]
         db.leads.count_documents({"user_id": uid}),
         db.leads.count_documents({"user_id": uid, "created_at": {"$gte": period_start_iso}}),
-        db.clients.count_documents({"user_id": uid, "status": "ativo"}),
+        db.clients.count_documents({"org_id": uid, "status": "ativo"}),
         db.deals.find(active_deal_q, {"_id": 0}).to_list(500),
         db.leads.find({"user_id": uid}, {"_id": 0}).sort("created_at", -1).to_list(8),
         db.leads.aggregate([
@@ -1770,7 +1770,7 @@ async def get_dashboard_kpis(period: int = 30, current_user: dict = Depends(get_
             {"$sort": {"count": -1}},
         ]).to_list(10),
         db.clients.aggregate([
-            {"$match": {"user_id": uid, "status": "ativo"}},
+            {"$match": {"org_id": uid, "status": "ativo"}},
             {"$group": {"_id": None, "total": {"$sum": "$monthly_value"}}},
         ]).to_list(1),
         db.operational_tasks.find({
@@ -1780,7 +1780,7 @@ async def get_dashboard_kpis(period: int = 30, current_user: dict = Depends(get_
             "$or": [{"deleted_at": {"$exists": False}}, {"deleted_at": None}],
         }, {"_id": 0, "task_id": 1, "title": 1, "client_id": 1, "due_date": 1}).sort("due_date", 1).to_list(50),
         db.clients.count_documents({
-            "user_id": uid,
+            "org_id": uid,
             "status": "ativo",
             "$or": [
                 {"updated_at": {"$lt": thirty_days_ago_iso}},
