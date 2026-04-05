@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Settings, Sun, Moon, Globe, Bot, Zap, FlaskConical, CheckCircle2, XCircle, Loader2, Sparkles, Key, Eye, EyeOff, Save, MessageCircle, Copy, CheckCheck, CalendarClock, Share2, Instagram } from "lucide-react";
+import { Settings, Sun, Moon, Globe, Bot, Zap, FlaskConical, CheckCircle2, XCircle, Loader2, Sparkles, Key, Eye, EyeOff, Save, MessageCircle, Copy, CheckCheck, CalendarClock, Share2, Instagram, Users, UserPlus, Trash2, Crown, User } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 function getAuthHeader() {
@@ -428,6 +428,145 @@ function ApiKeysSection() {
   );
 }
 
+function MembersSection({ currentUser }) {
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("member");
+  const [inviting, setInviting] = useState(false);
+  const [removingId, setRemovingId] = useState(null);
+
+  const isAdmin = currentUser?.role === "admin";
+
+  const loadMembers = async () => {
+    try {
+      const res = await axios.get(`${API}/org/members`, { headers: getAuthHeader() });
+      setMembers(res.data);
+    } catch {}
+    setLoading(false);
+  };
+
+  useEffect(() => { loadMembers(); }, []);
+
+  const handleInvite = async () => {
+    if (!email.trim()) return;
+    setInviting(true);
+    try {
+      await axios.post(`${API}/org/members/invite`, { email: email.trim(), role }, { headers: getAuthHeader() });
+      toast.success(`Convite enviado para ${email}`);
+      setEmail("");
+      await loadMembers();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erro ao enviar convite");
+    }
+    setInviting(false);
+  };
+
+  const handleRemove = async (userId) => {
+    if (!window.confirm("Remover este membro da organização?")) return;
+    setRemovingId(userId);
+    try {
+      await axios.delete(`${API}/org/members/${userId}`, { headers: getAuthHeader() });
+      toast.success("Membro removido");
+      setMembers(m => m.filter(x => x.user_id !== userId));
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erro ao remover membro");
+    }
+    setRemovingId(null);
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-5 mb-4">
+      <h2 className="text-sm font-heading font-semibold mb-1 flex items-center gap-2">
+        <Users size={16} />
+        Membros da Organização
+      </h2>
+      <p className="text-xs text-muted-foreground mb-4">
+        Gerencie quem tem acesso à sua organização e suas permissões.
+      </p>
+
+      {/* Member list */}
+      {loading ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+          <Loader2 size={13} className="animate-spin" /> Carregando membros...
+        </div>
+      ) : (
+        <div className="space-y-2 mb-5">
+          {members.map(m => (
+            <div key={m.user_id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="p-1.5 bg-background rounded-md border border-border">
+                  {m.role === "admin" ? <Crown size={13} className="text-amber-500" /> : <User size={13} className="text-muted-foreground" />}
+                </div>
+                <div>
+                  <p className="text-sm font-medium">{m.name || m.email}</p>
+                  <p className="text-xs text-muted-foreground">{m.email}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                  m.role === "admin"
+                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                    : "bg-muted text-muted-foreground"
+                }`}>
+                  {m.role === "admin" ? "Admin" : "Membro"}
+                </span>
+                {isAdmin && m.user_id !== currentUser?.user_id && (
+                  <button
+                    onClick={() => handleRemove(m.user_id)}
+                    disabled={removingId === m.user_id}
+                    className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    title="Remover membro"
+                  >
+                    {removingId === m.user_id
+                      ? <Loader2 size={13} className="animate-spin" />
+                      : <Trash2 size={13} />}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          {members.length === 0 && (
+            <p className="text-xs text-muted-foreground py-2">Nenhum membro encontrado.</p>
+          )}
+        </div>
+      )}
+
+      {/* Invite form — admin only */}
+      {isAdmin && (
+        <div className="border-t border-border pt-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.1em] mb-3">Convidar novo membro</p>
+          <div className="flex gap-2 flex-wrap">
+            <Input
+              placeholder="email@agencia.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleInvite()}
+              className="flex-1 min-w-[200px] text-sm"
+            />
+            <select
+              value={role}
+              onChange={e => setRole(e.target.value)}
+              className="px-3 py-2 rounded-md border border-border bg-background text-sm text-foreground"
+            >
+              <option value="member">Membro</option>
+              <option value="admin">Admin</option>
+            </select>
+            <Button onClick={handleInvite} disabled={inviting || !email.trim()} className="gap-2">
+              {inviting
+                ? <><Loader2 size={14} className="animate-spin" />Enviando...</>
+                : <><UserPlus size={14} />Convidar</>}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            O convidado receberá um link para criar a conta já vinculada à sua organização.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InstagramApiSection() {
   const backendUrl = process.env.REACT_APP_BACKEND_URL || "";
   const webhookUrl = `${backendUrl}/api/webhook/instagram`;
@@ -596,6 +735,9 @@ export default function Configuracoes() {
           </div>
         </div>
       </div>
+
+      {/* Members */}
+      <MembersSection currentUser={user} />
 
       {/* Appearance */}
       <div className="bg-card border border-border rounded-lg p-5 mb-4">
