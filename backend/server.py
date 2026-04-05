@@ -37,8 +37,8 @@ JWT_EXPIRY_DAYS = 7
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
 
 PLAN_LIMITS = {
-    "free":    {"clients": 3,  "carousels_month": 10, "leads": 100, "members": 1},
-    "starter": {"clients": 15, "carousels_month": 50, "leads": 500, "members": 5},
+    "free":    {"clients": 3,  "carousels_month": 10, "leads": 100, "members": 5},
+    "starter": {"clients": 15, "carousels_month": 50, "leads": 500, "members": 10},
     "pro":     {"clients": -1, "carousels_month": -1, "leads": -1,  "members": -1},
 }
 
