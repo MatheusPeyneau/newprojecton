@@ -10,7 +10,7 @@ import {
 import {
   AlertCircle, AlertTriangle, CheckCircle2, ChevronRight,
   DollarSign, TrendingUp, Target, Clock, ListTodo, FileWarning,
-  Users, Building2, RefreshCw, Bell,
+  Users, Building2, RefreshCw, Bell, CalendarRange, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -95,24 +95,84 @@ function KPICard({ title, value, sub, icon: Icon, iconCls, testId, onClick }) {
 }
 
 // ——— Period Selector ———
-function PeriodSelector({ period, onChange }) {
+function PeriodSelector({ period, customRange, onChangePeriod, onChangeCustom }) {
+  const [showCustom, setShowCustom] = useState(!!customRange);
+  const [start, setStart] = useState(customRange?.start || "");
+  const [end, setEnd] = useState(customRange?.end || "");
+
+  const applyCustom = () => {
+    if (start && end && start <= end) {
+      onChangeCustom({ start, end });
+    }
+  };
+
+  const clearCustom = () => {
+    setShowCustom(false);
+    setStart("");
+    setEnd("");
+    onChangeCustom(null);
+    onChangePeriod(30);
+  };
+
   return (
-    <div className="flex items-center gap-1 bg-muted rounded-lg p-1" data-testid="period-selector">
-      {[30, 60, 90].map((p) => (
+    <div className="flex items-center gap-2 flex-wrap justify-end">
+      <div className="flex items-center gap-1 bg-muted rounded-lg p-1" data-testid="period-selector">
+        {[30, 60, 90].map((p) => (
+          <button
+            key={p}
+            onClick={() => { setShowCustom(false); setStart(""); setEnd(""); onChangeCustom(null); onChangePeriod(p); }}
+            className={cn(
+              "px-3 py-1 rounded-md text-xs font-semibold transition-all",
+              !customRange && period === p
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            data-testid={`period-btn-${p}`}
+          >
+            {p}d
+          </button>
+        ))}
         <button
-          key={p}
-          onClick={() => onChange(p)}
+          onClick={() => setShowCustom(v => !v)}
           className={cn(
-            "px-3 py-1 rounded-md text-xs font-semibold transition-all",
-            period === p
+            "px-3 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1",
+            (customRange || showCustom)
               ? "bg-card text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           )}
-          data-testid={`period-btn-${p}`}
         >
-          {p}d
+          <CalendarRange size={11} />
+          Personalizado
         </button>
-      ))}
+      </div>
+
+      {showCustom && (
+        <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-1.5">
+          <input
+            type="date"
+            value={start}
+            onChange={e => setStart(e.target.value)}
+            className="text-xs bg-transparent outline-none text-foreground w-[120px]"
+          />
+          <span className="text-xs text-muted-foreground">até</span>
+          <input
+            type="date"
+            value={end}
+            onChange={e => setEnd(e.target.value)}
+            className="text-xs bg-transparent outline-none text-foreground w-[120px]"
+          />
+          <button
+            onClick={applyCustom}
+            disabled={!start || !end || start > end}
+            className="text-xs font-semibold text-primary hover:opacity-80 disabled:opacity-40 transition-opacity"
+          >
+            Aplicar
+          </button>
+          <button onClick={clearCustom} className="text-muted-foreground hover:text-foreground transition-colors">
+            <X size={12} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -282,18 +342,27 @@ function DashboardSkeleton() {
 // ——— Dashboard ———
 export default function Dashboard() {
   const [period, setPeriod] = useState(30);
+  const [customRange, setCustomRange] = useState(null); // { start: "YYYY-MM-DD", end: "YYYY-MM-DD" }
   const [kpis, setKpis] = useState(null);
   const [mrrTrend, setMrrTrend] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
   const prevAlerts = useRef({ stale: 0, proposals: 0, overdue: 0 });
   const periodRef = useRef(30);
+  const customRangeRef = useRef(null);
   const navigate = useNavigate();
 
-  const loadData = useCallback(async (p, isPolling = false) => {
+  const buildKpisUrl = (p, range) => {
+    if (range?.start && range?.end) {
+      return `${API}/dashboard/kpis?start_date=${range.start}&end_date=${range.end}`;
+    }
+    return `${API}/dashboard/kpis?period=${p}`;
+  };
+
+  const loadData = useCallback(async (p, isPolling = false, range = null) => {
     try {
       const [kpisRes, trendRes] = await Promise.all([
-        axios.get(`${API}/dashboard/kpis?period=${p}`, { headers: getAuthHeader() }),
+        axios.get(buildKpisUrl(p, range ?? customRangeRef.current), { headers: getAuthHeader() }),
         axios.get(`${API}/dashboard/mrr-trend`, { headers: getAuthHeader() }),
       ]);
       const d = kpisRes.data;
@@ -338,7 +407,14 @@ export default function Dashboard() {
   const handlePeriodChange = (p) => {
     setPeriod(p);
     periodRef.current = p;
-    loadData(p);
+    loadData(p, false, null);
+  };
+
+  const handleCustomRange = (range) => {
+    setCustomRange(range);
+    customRangeRef.current = range;
+    if (range) loadData(period, false, range);
+    else loadData(periodRef.current, false, null);
   };
 
   if (loading) return <DashboardSkeleton />;
@@ -379,9 +455,14 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <PeriodSelector period={period} onChange={handlePeriodChange} />
+          <PeriodSelector
+            period={period}
+            customRange={customRange}
+            onChangePeriod={handlePeriodChange}
+            onChangeCustom={handleCustomRange}
+          />
           <button
-            onClick={() => loadData(period)}
+            onClick={() => loadData(period, false, customRange)}
             className="p-2 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
             title="Atualizar dados"
             data-testid="refresh-btn"
@@ -456,7 +537,11 @@ export default function Dashboard() {
 
         <div className="bg-card border border-border rounded-lg p-5" data-testid="conversion-stats-section">
           <h2 className="text-base font-heading font-semibold mb-1">Métricas Chave</h2>
-          <p className="text-xs text-muted-foreground mb-4">Últimos {period} dias</p>
+          <p className="text-xs text-muted-foreground mb-4">
+            {customRange
+              ? `${customRange.start} → ${customRange.end}`
+              : `Últimos ${period} dias`}
+          </p>
           <div className="space-y-4">
             <div>
               <div className="flex justify-between text-sm mb-1.5">

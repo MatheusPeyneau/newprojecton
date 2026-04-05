@@ -1730,9 +1730,24 @@ async def get_mrr_trend(current_user: dict = Depends(get_current_user)):
 
 
 @api_router.get("/dashboard/kpis")
-async def get_dashboard_kpis(period: int = 30, current_user: dict = Depends(get_current_user)):
+async def get_dashboard_kpis(
+    period: int = 30,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
     now = datetime.now(timezone.utc)
-    period_start_iso = (now - timedelta(days=period)).isoformat()
+    if start_date and end_date:
+        try:
+            range_start = datetime.fromisoformat(start_date).replace(tzinfo=timezone.utc)
+            range_end = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+            period_start_iso = range_start.isoformat()
+            period = max(1, (range_end.date() - range_start.date()).days)
+            now = range_end
+        except ValueError:
+            period_start_iso = (now - timedelta(days=period)).isoformat()
+    else:
+        period_start_iso = (now - timedelta(days=period)).isoformat()
     seven_days_ago_iso = (now - timedelta(days=7)).isoformat()
     three_days_ago_iso = (now - timedelta(days=3)).isoformat()
     thirty_days_ago_iso = (now - timedelta(days=30)).isoformat()
