@@ -445,6 +445,7 @@ export function MembersSection({ currentUser }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("member");
+  const [invitePerms, setInvitePerms] = useState(ALL_MODULES.map(m => m.key));
   const [inviting, setInviting] = useState(false);
   const [removingId, setRemovingId] = useState(null);
   const [editingPerms, setEditingPerms] = useState(null); // user_id being edited
@@ -467,12 +468,12 @@ export function MembersSection({ currentUser }) {
     if (!email.trim()) return;
     setInviting(true);
     try {
-      const res = await axios.post(`${API}/org/members/invite`, { email: email.trim(), name: name.trim(), role }, { headers: getAuthHeader() });
+      const res = await axios.post(`${API}/org/members/invite`, { email: email.trim(), name: name.trim(), role, permissions: invitePerms }, { headers: getAuthHeader() });
       const token = res.data.invite_token;
       const link = `${window.location.origin}/aceitar-convite?token=${token}`;
       await navigator.clipboard.writeText(link).catch(() => {});
       toast.success(`Convite criado! Link copiado para área de transferência.`, { duration: 6000 });
-      setEmail(""); setName("");
+      setEmail(""); setName(""); setInvitePerms(ALL_MODULES.map(m => m.key));
       await loadMembers();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Erro ao enviar convite");
@@ -612,17 +613,46 @@ export function MembersSection({ currentUser }) {
       {isAdmin && (
         <div className="border-t border-border pt-4">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.1em] mb-3">Convidar novo membro</p>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap mb-4">
             <Input placeholder="Nome" value={name} onChange={e => setName(e.target.value)} className="flex-1 min-w-[140px] text-sm" />
             <Input placeholder="email@agencia.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleInvite()} className="flex-1 min-w-[180px] text-sm" />
             <select value={role} onChange={e => setRole(e.target.value)} className="px-3 py-2 rounded-md border border-border bg-background text-sm text-foreground">
               <option value="member">Membro</option>
               <option value="admin">Admin</option>
             </select>
-            <Button onClick={handleInvite} disabled={inviting || !email.trim()} className="gap-2">
-              {inviting ? <><Loader2 size={14} className="animate-spin" />Enviando...</> : <><UserPlus size={14} />Convidar</>}
-            </Button>
           </div>
+
+          {/* Módulos — só aparece quando role = member */}
+          {role === "member" && (
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.1em] mb-2">Módulos com acesso</p>
+              <div className="flex flex-wrap gap-2">
+                {ALL_MODULES.map(mod => {
+                  const enabled = invitePerms.includes(mod.key);
+                  return (
+                    <button
+                      key={mod.key}
+                      type="button"
+                      onClick={() => setInvitePerms(prev =>
+                        enabled ? prev.filter(k => k !== mod.key) : [...prev, mod.key]
+                      )}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                        enabled
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:border-primary/40"
+                      }`}
+                    >
+                      {mod.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <Button onClick={handleInvite} disabled={inviting || !email.trim()} className="gap-2">
+            {inviting ? <><Loader2 size={14} className="animate-spin" />Enviando...</> : <><UserPlus size={14} />Convidar</>}
+          </Button>
           <p className="text-xs text-muted-foreground mt-2">O link de aceite será copiado automaticamente. Envie para o funcionário.</p>
         </div>
       )}
