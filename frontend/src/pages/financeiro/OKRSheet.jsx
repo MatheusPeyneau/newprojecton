@@ -242,7 +242,17 @@ function AbaOKR({ okr, onChange, meses, systemClients = [] }) {
         })
         .reduce((sum, c) => sum + (parseFloat(c.monthly_value) || 0), 0);
     }
-    if (nome.includes("roas")) return inv > 0 ? fatTotal / inv : 0;
+    if (nome.includes("roas")) {
+      const receitaSistema = systemClients
+        .filter((c) => {
+          if (c.status !== "ativo") return false;
+          if (okr.dataFim && c.start_date && c.start_date > okr.dataFim) return false;
+          if (okr.dataInicio && c.end_date && c.end_date < okr.dataInicio) return false;
+          return true;
+        })
+        .reduce((sum, c) => sum + (parseFloat(c.monthly_value) || 0), 0);
+      return inv > 0 ? receitaSistema / inv : 0;
+    }
     if (nome.includes("lucro")) return lucro;
     if (nome.includes("margem")) return fatTotal > 0 ? (lucro / fatTotal) * 100 : 0;
     if (nome.includes("churn")) {
