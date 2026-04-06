@@ -225,7 +225,11 @@ function MRRTrendChart({ data, loading }) {
               tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v} />
             <Tooltip
               contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "11px" }}
-              formatter={(v, name) => [fmtCurrency(v), name === "mrr" ? "Realizado" : "Projetado"]}
+              formatter={(v, name, props) => {
+                // No ponto de conexao (mes atual), nao mostrar projetado duplicado
+                if (name === "projected" && props.payload?.mrr != null) return [null, null];
+                return [fmtCurrency(v), name === "mrr" ? "Realizado" : "Projetado"];
+              }}
             />
             <Area type="monotone" dataKey="mrr" stroke="#3B82F6" strokeWidth={2}
               fill="url(#mrrGradient)" dot={{ fill: "#3B82F6", r: 3 }} activeDot={{ r: 5 }}
