@@ -901,6 +901,8 @@ export default function OKRSheet({ onBack }) {
         const clients = await clientsRes.json();
         const deals = await dealsRes.json();
 
+        const now = new Date();
+
         // MRR: soma de clientes ativos recorrentes
         const activeRecurring = clients.filter(
           (c) => c.status === "ativo" && c.client_type === "recorrente"
@@ -915,7 +917,6 @@ export default function OKRSheet({ onBack }) {
         const faturamentoUnico = pontualMesAtual.reduce((sum, c) => sum + (parseFloat(c.monthly_value) || 0), 0);
 
         // Conversões: deals fechados no mês atual
-        const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
         const wonDeals = deals.filter((d) => {
           const stage = d.stage || {};
