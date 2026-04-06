@@ -1086,12 +1086,22 @@ async def add_lead_to_pipeline(lead_id: str, body: AddToPipelineRequest, current
         "updated_at": now,
     }
     await db.deals.insert_one(deal_doc)
+
+    # If target stage is a won stage, auto-create client immediately
+    auto_client_id = None
+    if stage.get("is_won_stage"):
+        auto_client_id = await auto_create_client_from_deal(deal_doc, current_user)
+
+    lead_status = "em_atendimento"
     await db.leads.update_one(
         {"lead_id": lead_id},
-        {"$set": {"status": "em_atendimento", "updated_at": now}},
+        {"$set": {"status": lead_status, "updated_at": now}},
     )
     result = {k: v for k, v in deal_doc.items() if k != "_id"}
     result["stage"] = stage
+    if auto_client_id:
+        result["_client_auto_created"] = True
+        result["_client_id"] = auto_client_id
     return result
 
 
