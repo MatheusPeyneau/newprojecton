@@ -363,6 +363,7 @@ function AbaMes({ mesIdx, mes, onChange, systemData = null }) {
   const nDias = diasDoMes(mesIdx);
   const nomeMes = MESES_COMPLETOS[mesIdx];
   const [finOverrideMRR, setFinOverrideMRR] = useState(false);
+  const [finOverrideUnico, setFinOverrideUnico] = useState(false);
 
   const updateFunil = (linha, diaIdx, val) => {
     const novo = { ...mes.funil, [linha]: mes.funil[linha].map((v, i) => (i === diaIdx ? val : v)) };
@@ -385,9 +386,11 @@ function AbaMes({ mesIdx, mes, onChange, systemData = null }) {
 
   const met = calcMetricas(mes.funil);
   // Se usando MRR do sistema, substituir no financeiro para os cálculos
-  const finComMRR = (!finOverrideMRR && systemData?.mrr > 0)
-    ? { ...mes.financeiro, faturamentoRecorrente: String(systemData.mrr) }
-    : mes.financeiro;
+  const finComMRR = {
+    ...mes.financeiro,
+    ...(!finOverrideMRR && systemData?.mrr > 0 ? { faturamentoRecorrente: String(systemData.mrr) } : {}),
+    ...(!finOverrideUnico && systemData?.faturamentoUnico > 0 ? { faturamentoUnico: String(systemData.faturamentoUnico) } : {}),
+  };
   const fin = calcFinanceiro(finComMRR, met.inv);
 
   const LINHAS_FUNIL = [
@@ -636,8 +639,49 @@ function AbaMes({ mesIdx, mes, onChange, systemData = null }) {
           )}
         </div>
 
+        {/* faturamentoUnico — com sync do sistema */}
+        <div>
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+            Faturamento Único / Ticket (R$)
+            {systemData?.faturamentoUnico > 0 && !finOverrideUnico && (
+              <span className="flex items-center gap-1 text-primary text-[10px]">
+                <RefreshCw size={9} /> sistema
+              </span>
+            )}
+          </label>
+          {systemData?.faturamentoUnico > 0 && !finOverrideUnico ? (
+            <div className="flex items-center gap-2">
+              <div className="flex-1 text-sm bg-muted border border-border rounded-lg px-3 py-2 text-muted-foreground">
+                {fmtBRL(systemData.faturamentoUnico)}
+              </div>
+              <button
+                onClick={() => setFinOverrideUnico(true)}
+                className="text-[10px] text-muted-foreground hover:text-foreground underline whitespace-nowrap"
+              >
+                editar
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                value={mes.financeiro.faturamentoUnico}
+                onChange={(e) => updateFin("faturamentoUnico", e.target.value)}
+                className="flex-1 text-sm bg-blue-50 dark:bg-blue-950/20 border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              {systemData?.faturamentoUnico > 0 && (
+                <button
+                  onClick={() => { setFinOverrideUnico(false); updateFin("faturamentoUnico", ""); }}
+                  className="text-[10px] text-primary hover:underline whitespace-nowrap"
+                >
+                  usar sistema
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
         {[
-          { label: "Faturamento Único / Ticket (R$)", key: "faturamentoUnico" },
           { label: "Imposto (%)", key: "imposto" },
           { label: "Comissão Closer (%)", key: "comissaoCloser" },
           { label: "Comissão SDR (%)", key: "comissaoSDR" },
@@ -863,6 +907,13 @@ export default function OKRSheet({ onBack }) {
         );
         const mrr = activeRecurring.reduce((sum, c) => sum + (parseFloat(c.monthly_value) || 0), 0);
 
+        // Faturamento Único: clientes pontuais com start_date no mês atual
+        const mesAtualStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const pontualMesAtual = clients.filter(
+          (c) => c.status === "ativo" && c.client_type === "pontual" && (c.start_date || "").startsWith(mesAtualStr)
+        );
+        const faturamentoUnico = pontualMesAtual.reduce((sum, c) => sum + (parseFloat(c.monthly_value) || 0), 0);
+
         // Conversões: deals fechados no mês atual
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
@@ -886,7 +937,7 @@ export default function OKRSheet({ onBack }) {
           .map(([origin, v]) => ({ origin, ...v }))
           .sort((a, b) => b.count - a.count);
 
-        setSystemData({ mrr, conversoes, clientsByOrigin });
+        setSystemData({ mrr, faturamentoUnico, conversoes, clientsByOrigin });
       } catch {}
     };
     fetchSystemData();
