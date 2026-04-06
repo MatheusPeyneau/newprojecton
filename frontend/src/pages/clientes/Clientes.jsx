@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Search, Pencil, Trash2, Building2 } from "lucide-react";
+import { toast } from "sonner";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -189,19 +190,37 @@ export default function Clientes() {
     setSaving(true);
     try {
       const payload = {
-        ...form,
-        monthly_value: parseFloat(form.monthly_value) || 0,
+        name:            form.name.trim(),
+        email:           form.email.trim() || null,
+        phone:           form.phone.trim() || null,
+        company:         form.company.trim() || null,
+        cpf_cnpj:        form.cpf_cnpj.trim() || null,
+        status:          form.status,
+        monthly_value:   parseFloat(form.monthly_value) || 0,
+        billing_type:    form.billing_type,
+        start_date:      form.start_date || null,
+        due_date:        form.due_date || null,
+        end_date:        form.end_date || null,
+        notes:           form.notes.trim() || null,
+        client_type:     form.client_type,
         contract_months: form.contract_months ? parseInt(form.contract_months) : null,
+        source:          form.source || null,
+        churn_reason:    form.churn_reason.trim() || null,
       };
       if (editingClient) {
         await axios.put(`${API}/clients/${editingClient.client_id}`, payload, { headers: getAuthHeader() });
+        toast.success("Cliente atualizado!");
       } else {
         await axios.post(`${API}/clients`, payload, { headers: getAuthHeader() });
+        toast.success("Cliente criado!");
       }
       await fetchClients();
       setModalOpen(false);
     } catch (err) {
-      console.error("Error saving client:", err);
+      const detail = err.response?.data?.detail;
+      const msg = typeof detail === "string" ? detail : JSON.stringify(detail);
+      toast.error(msg || "Erro ao salvar cliente");
+      console.error("Error saving client:", err.response?.data || err);
     }
     setSaving(false);
   };
