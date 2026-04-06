@@ -1718,12 +1718,18 @@ def _days_ago(dt_str: str, now: datetime) -> int:
 
 @api_router.get("/dashboard/mrr-trend")
 async def get_mrr_trend(current_user: dict = Depends(get_current_user)):
-    """Return MRR trend: last 6 months (realized) + next 3 months (projected)."""
+    """Return MRR trend: last 6 months (realized) + next 3 months (projected).
+
+    Recorrente: monthly_value counts in every month of the contract period.
+    Pontual: monthly_value counts only in the month matching start_date.
+    """
     now = datetime.now(timezone.utc)
-    clients = await db.clients.find(
-        {"org_id": current_user["org_id"], "status": "ativo"},
-        {"_id": 0, "monthly_value": 1, "created_at": 1, "end_date": 1},
-    ).to_list(500)
+
+    # Realized: include all clients (even canceled) so past months are accurate
+    all_clients = await db.clients.find(
+        {"org_id": current_user["org_id"]},
+        {"_id": 0, "monthly_value": 1, "created_at": 1, "start_date": 1, "end_date": 1, "client_type": 1, "status": 1},
+    ).to_list(1000)
 
     def _month_end_iso(year: int, month: int) -> str:
         if month == 12:
@@ -1733,33 +1739,60 @@ async def get_mrr_trend(current_user: dict = Depends(get_current_user)):
     def _month_start_str(year: int, month: int) -> str:
         return f"{year:04d}-{month:02d}-01"
 
+    def _month_end_str(year: int, month: int) -> str:
+        if month == 12:
+            return f"{year + 1:04d}-01-01"
+        return f"{year:04d}-{month + 1:02d}-01"
+
     now_iso = now.isoformat()
-    current_month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc).isoformat()
+    current_month_start_iso = datetime(now.year, now.month, 1, tzinfo=timezone.utc).isoformat()
+
     trend = []
-    # 5 months back → 3 months ahead (9 points total)
     for delta in range(-5, 4):
         total = now.year * 12 + now.month - 1 + delta
         year, month = total // 12, total % 12 + 1
-        end_iso = _month_end_iso(year, month)
-        start_str = _month_start_str(year, month)
+        start_str  = _month_start_str(year, month)
+        end_str    = _month_end_str(year, month)
+        end_iso    = _month_end_iso(year, month)
         month_start_iso = datetime(year, month, 1, tzinfo=timezone.utc).isoformat()
         label = datetime(year, month, 1).strftime("%b/%y")
 
-        # A month is "future" only if it hasn't started yet
-        is_future = month_start_iso > now_iso
-        is_current = month_start_iso == current_month_start
+        is_future  = month_start_iso > now_iso
+        is_current = month_start_iso == current_month_start_iso
 
-        mrr_snap = sum(
-            c.get("monthly_value", 0) for c in clients
-            if c.get("created_at", "") < end_iso
-            and (not c.get("end_date") or c["end_date"] >= start_str)
-        )
-        value = round(mrr_snap, 2)
+        snap = 0.0
+        for c in all_clients:
+            val = c.get("monthly_value") or 0
+            if not val:
+                continue
+            ctype = c.get("client_type", "recorrente")
+
+            if ctype == "pontual":
+                # One-time: only counts in the month of start_date
+                sd = c.get("start_date") or ""
+                if sd and start_str <= sd < end_str:
+                    snap += val
+            else:
+                # Recorrente: counts every month client is active
+                # Past/current months: use created_at as proxy if no start_date
+                created = (c.get("start_date") or c.get("created_at") or "")[:10]
+                end_date = c.get("end_date") or ""
+                # Client must have started before end of this month
+                if created >= end_str:
+                    continue
+                # Client must not have ended before start of this month
+                if end_date and end_date < start_str:
+                    continue
+                # For future months, only count currently active clients
+                if is_future and c.get("status") != "ativo":
+                    continue
+                snap += val
+
+        value = round(snap, 2)
 
         if is_future:
             trend.append({"month": label, "mrr": None, "projected": value})
         elif is_current:
-            # Current month: show in both lines to connect them
             trend.append({"month": label, "mrr": value, "projected": value})
         else:
             trend.append({"month": label, "mrr": value, "projected": None})
