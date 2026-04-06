@@ -223,38 +223,40 @@ function AbaOKR({ okr, onChange, meses, systemClients = [] }) {
 
     if (nome.includes("nps")) return parseN(kr.npsManual || "");
 
-    let fatTotal = 0, inv = 0, lucro = 0;
+    let inv = 0, impostoRate = 0, closerRate = 0, sdrRate = 0, mesesComTaxa = 0;
     mesesNoPeriodo.forEach((m) => {
       const met = calcMetricas(m.funil);
-      const fin = calcFinanceiro(m.financeiro, met.inv);
-      fatTotal += fin.fatTotal;
       inv += met.inv;
-      lucro += fin.lucro1;
+      const temTaxa = m.financeiro.imposto || m.financeiro.comissaoCloser || m.financeiro.comissaoSDR;
+      if (temTaxa) {
+        impostoRate += parseN(m.financeiro.imposto);
+        closerRate += parseN(m.financeiro.comissaoCloser);
+        sdrRate += parseN(m.financeiro.comissaoSDR);
+        mesesComTaxa++;
+      }
     });
+    const nMeses = mesesComTaxa || 1;
+    const taxaImposto = impostoRate / nMeses;
+    const taxaCloser = closerRate / nMeses;
+    const taxaSdr = sdrRate / nMeses;
 
-    if (nome.includes("receita")) {
-      return systemClients
-        .filter((c) => {
-          if (c.status !== "ativo") return false;
-          if (okr.dataFim && c.start_date && c.start_date > okr.dataFim) return false;
-          if (okr.dataInicio && c.end_date && c.end_date < okr.dataInicio) return false;
-          return true;
-        })
-        .reduce((sum, c) => sum + (parseFloat(c.monthly_value) || 0), 0);
+    const receitaSistema = systemClients
+      .filter((c) => {
+        if (c.status !== "ativo") return false;
+        if (okr.dataFim && c.start_date && c.start_date > okr.dataFim) return false;
+        if (okr.dataInicio && c.end_date && c.end_date < okr.dataInicio) return false;
+        return true;
+      })
+      .reduce((sum, c) => sum + (parseFloat(c.monthly_value) || 0), 0);
+
+    if (nome.includes("receita")) return receitaSistema;
+    if (nome.includes("roas")) return inv > 0 ? receitaSistema / inv : 0;
+    if (nome.includes("lucro") || nome.includes("margem")) {
+      const descontos = receitaSistema * ((taxaImposto + taxaCloser + taxaSdr) / 100);
+      const lucro = receitaSistema - inv - descontos;
+      if (nome.includes("margem")) return receitaSistema > 0 ? (lucro / receitaSistema) * 100 : 0;
+      return lucro;
     }
-    if (nome.includes("roas")) {
-      const receitaSistema = systemClients
-        .filter((c) => {
-          if (c.status !== "ativo") return false;
-          if (okr.dataFim && c.start_date && c.start_date > okr.dataFim) return false;
-          if (okr.dataInicio && c.end_date && c.end_date < okr.dataInicio) return false;
-          return true;
-        })
-        .reduce((sum, c) => sum + (parseFloat(c.monthly_value) || 0), 0);
-      return inv > 0 ? receitaSistema / inv : 0;
-    }
-    if (nome.includes("lucro")) return lucro;
-    if (nome.includes("margem")) return fatTotal > 0 ? (lucro / fatTotal) * 100 : 0;
     if (nome.includes("churn")) {
       const cancelados = systemClients.filter((c) => {
         if (!c.end_date) return false;
