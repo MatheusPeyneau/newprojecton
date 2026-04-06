@@ -1,8 +1,11 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { ArrowLeft, Plus, Trash2, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Download, RefreshCw } from "lucide-react";
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem("agenciaos_token")}` });
 
 // ─── Utilitários ────────────────────────────────────────────────────────────
 
@@ -49,6 +52,29 @@ const calcMetricas = (funil) => {
     custoReal: conv > 0 ? inv / conv : 0,
     inv, imp, cli, msg, int, conv,
   };
+};
+
+const calcMetricasOrcado = (orcadoTotal) => {
+  const inv = parseN(orcadoTotal.investimento);
+  const imp = parseN(orcadoTotal.impressoes);
+  const cli = parseN(orcadoTotal.cliques);
+  const msg = parseN(orcadoTotal.mensagens);
+  const int = parseN(orcadoTotal.interessados);
+  const conv = parseN(orcadoTotal.conversao);
+  return {
+    cpm: imp > 0 ? (inv / imp) * 1000 : 0,
+    cpc: cli > 0 ? inv / cli : 0,
+    custoMsg: msg > 0 ? inv / msg : 0,
+    custoAg: int > 0 ? inv / int : 0,
+    custoReal: conv > 0 ? inv / conv : 0,
+  };
+};
+
+const semaforo = (real, orc) => {
+  if (orc === 0) return null;
+  if (real <= orc) return "🟢";
+  if (real <= orc * 1.2) return "🟡";
+  return "🔴";
 };
 
 const calcFinanceiro = (fin, inv) => {
@@ -333,9 +359,10 @@ function AbaOKR({ okr, onChange, meses }) {
 
 // ─── Aba Mês ─────────────────────────────────────────────────────────────────
 
-function AbaMes({ mesIdx, mes, onChange }) {
+function AbaMes({ mesIdx, mes, onChange, systemData = null }) {
   const nDias = diasDoMes(mesIdx);
   const nomeMes = MESES_COMPLETOS[mesIdx];
+  const [finOverrideMRR, setFinOverrideMRR] = useState(false);
 
   const updateFunil = (linha, diaIdx, val) => {
     const novo = { ...mes.funil, [linha]: mes.funil[linha].map((v, i) => (i === diaIdx ? val : v)) };
@@ -357,7 +384,11 @@ function AbaMes({ mesIdx, mes, onChange }) {
   };
 
   const met = calcMetricas(mes.funil);
-  const fin = calcFinanceiro(mes.financeiro, met.inv);
+  // Se usando MRR do sistema, substituir no financeiro para os cálculos
+  const finComMRR = (!finOverrideMRR && systemData?.mrr > 0)
+    ? { ...mes.financeiro, faturamentoRecorrente: String(systemData.mrr) }
+    : mes.financeiro;
+  const fin = calcFinanceiro(finComMRR, met.inv);
 
   const LINHAS_FUNIL = [
     { key: "investimento", label: "R$ Investimento", prefix: "R$" },
@@ -365,7 +396,7 @@ function AbaMes({ mesIdx, mes, onChange }) {
     { key: "cliques", label: "# Cliques", prefix: "" },
     { key: "mensagens", label: "# Mensagens", prefix: "" },
     { key: "interessados", label: "# Interessados", prefix: "" },
-    { key: "conversao", label: "# Conversão", prefix: "" },
+    { key: "conversao", label: "# Realizados", prefix: "" },
   ];
 
   const exportCSV = () => {
@@ -484,9 +515,28 @@ function AbaMes({ mesIdx, mes, onChange }) {
               const orcAteData = nDias > 0 && orcTotal > 0
                 ? (orcTotal / nDias) * Math.min(new Date().getDate(), nDias)
                 : 0;
+              const isConversao = key === "conversao";
+              const syncConversao = () => {
+                if (!systemData?.conversoes) return;
+                const hoje = Math.min(new Date().getDate(), nDias) - 1;
+                updateFunil("conversao", hoje, String(systemData.conversoes));
+              };
               return (
                 <tr key={key} className="border-b border-border last:border-0 hover:bg-muted/10">
-                  <td className="px-3 py-1.5 font-medium sticky left-0 bg-card">{label}</td>
+                  <td className="px-3 py-1.5 font-medium sticky left-0 bg-card">
+                    <span className="flex items-center gap-1.5">
+                      {label}
+                      {isConversao && systemData?.conversoes > 0 && (
+                        <button
+                          onClick={syncConversao}
+                          title={`Sincronizar ${systemData.conversoes} fechamentos do pipeline`}
+                          className="text-primary hover:text-primary/70 flex items-center gap-0.5 text-[10px] border border-primary/30 rounded px-1 py-0.5"
+                        >
+                          <RefreshCw size={9} /> {systemData.conversoes}
+                        </button>
+                      )}
+                    </span>
+                  </td>
                   {Array.from({ length: nDias }, (_, d) => (
                     <td key={d} className="px-1 py-1">
                       <CellInput
@@ -517,25 +567,76 @@ function AbaMes({ mesIdx, mes, onChange }) {
       {/* Bloco 3 — Métricas calculadas */}
       <SectionTitle>Métricas Calculadas</SectionTitle>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-2">
-        {[
-          { label: "R$ CPM", value: fmtBRL(met.cpm) },
-          { label: "R$ CPC", value: fmtBRL(met.cpc) },
-          { label: "R$ Custo/Mensagem", value: fmtBRL(met.custoMsg) },
-          { label: "R$ Custo/Agendamento", value: fmtBRL(met.custoAg) },
-          { label: "R$ Custo/Realizado", value: fmtBRL(met.custoReal) },
-        ].map(({ label, value }) => (
-          <div key={label} className="bg-muted/40 rounded-xl p-3 border border-border">
-            <p className="text-[10px] text-muted-foreground mb-1">{label}</p>
-            <p className="text-sm font-semibold">{value}</p>
-          </div>
-        ))}
+        {(() => {
+          const metOrc = calcMetricasOrcado(mes.funil.orcadoTotal);
+          return [
+            { label: "R$ CPM", value: fmtBRL(met.cpm), orcKey: "cpm", tooltip: "Custo por mil impressões. Quanto menor, mais eficiente a distribuição dos anúncios." },
+            { label: "R$ CPC", value: fmtBRL(met.cpc), orcKey: "cpc", tooltip: "Custo por clique. Indica eficiência do criativo em gerar cliques." },
+            { label: "R$ Custo/Mensagem", value: fmtBRL(met.custoMsg), orcKey: "custoMsg", tooltip: "Custo para cada pessoa que enviou mensagem." },
+            { label: "R$ Custo/Agendamento", value: fmtBRL(met.custoAg), orcKey: "custoAg", tooltip: "Custo por agendamento/interessado qualificado." },
+            { label: "R$ Custo/Realizado", value: fmtBRL(met.custoReal), orcKey: "custoReal", tooltip: "Custo por conversão efetivada (cliente fechado)." },
+          ].map(({ label, value, orcKey, tooltip }) => {
+            const sem = semaforo(met[orcKey === "cpm" ? "cpm" : orcKey === "cpc" ? "cpc" : orcKey === "custoMsg" ? "custoMsg" : orcKey === "custoAg" ? "custoAg" : "custoReal"], metOrc[orcKey]);
+            return (
+              <div key={label} title={tooltip} className="bg-muted/40 rounded-xl p-3 border border-border cursor-help">
+                <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
+                  {sem && <span>{sem}</span>}
+                  {label}
+                </p>
+                <p className="text-sm font-semibold">{value}</p>
+                {sem && <p className="text-[9px] text-muted-foreground mt-0.5">vs orçado</p>}
+              </div>
+            );
+          });
+        })()}
       </div>
 
       {/* Bloco 4 — Financeiro */}
       <SectionTitle>Financeiro</SectionTitle>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* faturamentoRecorrente — com sync do sistema */}
+        <div>
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+            Faturamento Mensal Recorrente (R$)
+            {systemData?.mrr > 0 && !finOverrideMRR && (
+              <span className="flex items-center gap-1 text-primary text-[10px]">
+                <RefreshCw size={9} /> sistema
+              </span>
+            )}
+          </label>
+          {systemData?.mrr > 0 && !finOverrideMRR ? (
+            <div className="flex items-center gap-2">
+              <div className="flex-1 text-sm bg-muted border border-border rounded-lg px-3 py-2 text-muted-foreground">
+                {fmtBRL(systemData.mrr)}
+              </div>
+              <button
+                onClick={() => setFinOverrideMRR(true)}
+                className="text-[10px] text-muted-foreground hover:text-foreground underline whitespace-nowrap"
+              >
+                editar
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                value={mes.financeiro.faturamentoRecorrente}
+                onChange={(e) => updateFin("faturamentoRecorrente", e.target.value)}
+                className="flex-1 text-sm bg-blue-50 dark:bg-blue-950/20 border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              {systemData?.mrr > 0 && (
+                <button
+                  onClick={() => { setFinOverrideMRR(false); updateFin("faturamentoRecorrente", ""); }}
+                  className="text-[10px] text-primary hover:underline whitespace-nowrap"
+                >
+                  usar sistema
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
         {[
-          { label: "Faturamento Mensal Recorrente (R$)", key: "faturamentoRecorrente" },
           { label: "Faturamento Único / Ticket (R$)", key: "faturamentoUnico" },
           { label: "Imposto (%)", key: "imposto" },
           { label: "Comissão Closer (%)", key: "comissaoCloser" },
@@ -565,6 +666,61 @@ function AbaMes({ mesIdx, mes, onChange }) {
             <p className={`text-lg font-bold ${green ? "text-emerald-600" : "text-red-500"}`}>{value}</p>
           </div>
         ))}
+      </div>
+
+      {/* Bloco 5 — Clientes por Origem */}
+      {systemData?.clientsByOrigin?.length > 0 && (
+        <>
+          <SectionTitle>Clientes por Origem</SectionTitle>
+          <OrigemBlock data={systemData.clientsByOrigin} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Bloco Clientes por Origem ───────────────────────────────────────────────
+
+const ORIGIN_COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899", "#84cc16"];
+
+function OrigemBlock({ data }) {
+  const pieData = data.map((d) => ({ name: d.origin || "Não informado", value: d.count }));
+  return (
+    <div className="flex flex-col sm:flex-row gap-4 bg-muted/20 border border-border rounded-xl p-4 mb-2">
+      <div className="flex-shrink-0" style={{ width: 200, height: 180 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={false}>
+              {pieData.map((_, i) => (
+                <Cell key={i} fill={ORIGIN_COLORS[i % ORIGIN_COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip formatter={(v, n) => [v, n]} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="flex-1 overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="text-left px-2 py-1.5 font-medium text-muted-foreground">Origem</th>
+              <th className="text-center px-2 py-1.5 font-medium text-muted-foreground">Clientes</th>
+              <th className="text-center px-2 py-1.5 font-medium text-muted-foreground">MRR</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((d, i) => (
+              <tr key={i} className="border-b border-border last:border-0">
+                <td className="px-2 py-1.5 flex items-center gap-1.5">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: ORIGIN_COLORS[i % ORIGIN_COLORS.length] }} />
+                  {d.origin || "Não informado"}
+                </td>
+                <td className="px-2 py-1.5 text-center">{d.count}</td>
+                <td className="px-2 py-1.5 text-center">{fmtBRL(d.mrr)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -678,12 +834,63 @@ export default function OKRSheet({ onBack }) {
     return DEFAULT_STATE;
   });
 
-  const [abaAtiva, setAbaAtiva] = useState("okr");
+  const currentMonth = new Date().getMonth();
+  const [abaAtiva, setAbaAtiva] = useState(String(currentMonth));
+  const [systemData, setSystemData] = useState(null);
 
   // Salvar no localStorage sempre que data mudar
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }, [data]);
+
+  // Buscar dados do sistema (MRR, conversões, clientes por origem)
+  useEffect(() => {
+    const fetchSystemData = async () => {
+      try {
+        const headers = authHeaders();
+        const [clientsRes, dealsRes] = await Promise.all([
+          fetch(`${API}/clients`, { headers }),
+          fetch(`${API}/pipeline/deals`, { headers }),
+        ]);
+        if (!clientsRes.ok || !dealsRes.ok) return;
+
+        const clients = await clientsRes.json();
+        const deals = await dealsRes.json();
+
+        // MRR: soma de clientes ativos recorrentes
+        const activeRecurring = clients.filter(
+          (c) => c.status === "ativo" && c.client_type === "recorrente"
+        );
+        const mrr = activeRecurring.reduce((sum, c) => sum + (parseFloat(c.monthly_value) || 0), 0);
+
+        // Conversões: deals fechados no mês atual
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const wonDeals = deals.filter((d) => {
+          const stage = d.stage || {};
+          return stage.is_won_stage && d.created_at >= monthStart;
+        });
+        const conversoes = wonDeals.length;
+
+        // Clientes por origem
+        const originMap = {};
+        clients
+          .filter((c) => c.status === "ativo")
+          .forEach((c) => {
+            const origin = c.source || "";
+            if (!originMap[origin]) originMap[origin] = { count: 0, mrr: 0 };
+            originMap[origin].count += 1;
+            originMap[origin].mrr += parseFloat(c.monthly_value) || 0;
+          });
+        const clientsByOrigin = Object.entries(originMap)
+          .map(([origin, v]) => ({ origin, ...v }))
+          .sort((a, b) => b.count - a.count);
+
+        setSystemData({ mrr, conversoes, clientsByOrigin });
+      } catch {}
+    };
+    fetchSystemData();
+  }, []);
 
   const updateOKR = useCallback((okr) => setData((d) => ({ ...d, okr })), []);
 
@@ -742,6 +949,7 @@ export default function OKRSheet({ onBack }) {
               mesIdx={i}
               mes={data.meses[String(i)]}
               onChange={(m) => updateMes(i, m)}
+              systemData={i === currentMonth ? systemData : null}
             />
           ) : null
         )}
