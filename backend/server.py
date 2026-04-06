@@ -821,6 +821,11 @@ async def auto_create_client_from_deal(deal: dict, current_user: dict) -> Option
         "start_date": today,
         "due_date": deal.get("due_date"),
         "notes": deal.get("notes") or "",
+        "client_type": "recorrente",
+        "contract_months": deal.get("contract_months"),
+        "end_date": deal.get("end_date"),
+        "source": deal.get("source"),
+        "churn_reason": None,
         "org_id": current_user["org_id"],
         "webhook_token": secrets.token_urlsafe(32),
         "created_at": now,
@@ -1828,7 +1833,7 @@ async def get_dashboard_kpis(
         ]).to_list(10),
         db.clients.aggregate([
             {"$match": {"org_id": uid, "status": "ativo"}},
-            {"$group": {"_id": None, "total": {"$sum": "$monthly_value"}}},
+            {"$group": {"_id": None, "total": {"$sum": "$monthly_value"}, "ltv_total": {"$sum": {"$multiply": [{"$ifNull": ["$monthly_value", 0]}, {"$ifNull": ["$contract_months", 0]}]}}}},
         ]).to_list(1),
         db.operational_tasks.find({
             "client_id": {"$in": org_client_ids},
@@ -1847,6 +1852,7 @@ async def get_dashboard_kpis(
     )
 
     mrr = mrr_agg[0]["total"] if mrr_agg else 0
+    ltv_contratado_total = round(mrr_agg[0].get("ltv_total", 0) if mrr_agg else 0, 2)
     ticket_avg = round(mrr / active_clients_count) if active_clients_count > 0 else 0
 
     pipeline_deals = [d for d in all_deals if d.get("stage_id") not in [won_stage_id, lost_stage_id]]
@@ -1960,6 +1966,7 @@ async def get_dashboard_kpis(
         "predicted_revenue": round(predicted_revenue, 2),
         "active_clients": active_clients_count,
         "mrr": mrr,
+        "ltv_contratado_total": ltv_contratado_total,
         "ticket_avg": ticket_avg,
         "churn_risk_count": churn_risk_count,
         "conversion_rate": conversion_rate,

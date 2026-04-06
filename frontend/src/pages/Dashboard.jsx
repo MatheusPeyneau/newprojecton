@@ -514,12 +514,12 @@ export default function Dashboard() {
           onClick={() => navigate("/comercial/pipeline")}
         />
         <KPICard
-          title="Ticket Médio"
-          value={fmtCurrency(kpis?.ticket_avg || 0)}
-          sub="MRR por cliente ativo"
+          title="LTV Contratado"
+          value={fmtShort(kpis?.ltv_contratado_total || 0)}
+          sub={`Ticket médio: ${fmtCurrency(kpis?.ticket_avg || 0)}`}
           icon={Target}
           iconCls="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600"
-          testId="kpi-ticket-avg"
+          testId="kpi-ltv"
           onClick={() => navigate("/clientes")}
         />
         <KPICard
@@ -585,10 +585,14 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
-            <div className="pt-1 border-t border-border">
+            <div className="pt-1 border-t border-border space-y-1.5">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-muted-foreground">Valor total no pipeline</span>
                 <span className="text-sm font-bold text-primary">{fmtShort(kpis?.pipeline_value || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground">Ticket médio</span>
+                <span className="text-sm font-semibold">{fmtCurrency(kpis?.ticket_avg || 0)}</span>
               </div>
             </div>
           </div>
