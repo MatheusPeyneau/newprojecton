@@ -852,25 +852,50 @@ function OrigemBlock({ data }) {
 
 // ─── Aba Resumo ──────────────────────────────────────────────────────────────
 
-function AbaResumo({ meses }) {
+function AbaResumo({ meses, systemClients = [] }) {
+  const ano = new Date().getFullYear();
+
+  // Receita do sistema por mês: clientes ativos naquele mês
+  const receitaPorMes = useMemo(() =>
+    Array.from({ length: 12 }, (_, i) => {
+      const mesStart = `${ano}-${String(i + 1).padStart(2, "0")}-01`;
+      const mesEnd = `${ano}-${String(i + 1).padStart(2, "0")}-${String(new Date(ano, i + 1, 0).getDate()).padStart(2, "0")}`;
+      return systemClients
+        .filter((c) => {
+          if (c.status !== "ativo" && !c.end_date) return false;
+          if (c.start_date && c.start_date > mesEnd) return false;
+          if (c.end_date && c.end_date < mesStart) return false;
+          if (c.client_type === "pontual") return (c.start_date || "").startsWith(`${ano}-${String(i + 1).padStart(2, "0")}`);
+          return true;
+        })
+        .reduce((sum, c) => sum + (parseFloat(c.monthly_value) || 0), 0);
+    }),
+    [systemClients]
+  );
+
   const dados = useMemo(() =>
     MESES.map((nome, i) => {
       const m = meses[String(i)];
       const met = calcMetricas(m.funil);
       const fin = calcFinanceiro(m.financeiro, met.inv);
-      const roas = met.inv > 0 ? fin.fatTotal / met.inv : 0;
-      const margem = fin.fatTotal > 0 ? (fin.lucro1 / fin.fatTotal) * 100 : 0;
+      const receita = receitaPorMes[i];
+      // Impostos e comissões como % aplicados sobre receita do sistema
+      const taxaTotal = parseN(m.financeiro.imposto) + parseN(m.financeiro.comissaoCloser) + parseN(m.financeiro.comissaoSDR);
+      const descontos = receita * (taxaTotal / 100);
+      const lucro = receita - met.inv - descontos;
+      const roas = met.inv > 0 ? receita / met.inv : 0;
+      const margem = receita > 0 ? (lucro / receita) * 100 : 0;
       return {
         mes: nome,
         investimento: met.inv,
         conversoes: met.conv,
-        faturamento: fin.fatTotal,
+        faturamento: receita,
         roas,
-        lucro: fin.lucro1,
+        lucro,
         margem,
       };
     }),
-    [meses]
+    [meses, receitaPorMes]
   );
 
   return (
@@ -1085,7 +1110,7 @@ export default function OKRSheet({ onBack }) {
             />
           ) : null
         )}
-        {abaAtiva === "resumo" && <AbaResumo meses={data.meses} />}
+        {abaAtiva === "resumo" && <AbaResumo meses={data.meses} systemClients={systemData?.clients || []} />}
       </div>
     </div>
   );
