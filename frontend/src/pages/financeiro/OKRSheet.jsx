@@ -138,12 +138,8 @@ const mesVazio = () => ({
 
 const DEFAULT_STATE = {
   okr: {
-    valorProposta: "",
-    visao12: "",
-    visao3: "",
-    objetivo: "",
     dataInicio: "",
-    periodicidade: 7,
+    dataFim: "",
     keyResults: KRS_PADRAO,
   },
   meses: Object.fromEntries(Array.from({ length: 12 }, (_, i) => [String(i), mesVazio()])),
@@ -192,165 +188,228 @@ function SectionTitle({ children }) {
 
 // ─── Aba OKR Trimestral ──────────────────────────────────────────────────────
 
-function AbaOKR({ okr, onChange, meses }) {
-  const semanas = useMemo(
-    () => gerarSemanas(okr.dataInicio, okr.periodicidade),
-    [okr.dataInicio, okr.periodicidade]
-  );
-
+function AbaOKR({ okr, onChange, meses, systemClients = [] }) {
   const updateKR = (idx, field, val) => {
     const krs = okr.keyResults.map((k, i) => (i === idx ? { ...k, [field]: val } : k));
     onChange({ ...okr, keyResults: krs });
   };
 
-  const updateKRSemanal = (krIdx, semIdx, val) => {
-    const krs = okr.keyResults.map((k, i) => {
-      if (i !== krIdx) return k;
-      const sem = [...(k.semanal || [])];
-      sem[semIdx] = val;
-      return { ...k, semanal: sem };
-    });
-    onChange({ ...okr, keyResults: krs });
-  };
-
   const addKR = () => {
-    const novo = { id: Date.now(), nome: "Novo KR", formula: "", base: "", meta: "", semanal: [] };
-    onChange({ ...okr, keyResults: [...okr.keyResults, novo] });
+    onChange({ ...okr, keyResults: [...okr.keyResults, { id: Date.now(), nome: "Novo KR", meta: "" }] });
   };
 
   const removeKR = (idx) => {
     onChange({ ...okr, keyResults: okr.keyResults.filter((_, i) => i !== idx) });
   };
 
-  // Calcular valor atual de cada KR a partir dos dados mensais
+  // Meses que se sobrepõem ao período selecionado
+  const mesesNoPeriodo = useMemo(() => {
+    const ano = new Date().getFullYear();
+    return Array.from({ length: 12 }, (_, i) => {
+      const mesStart = new Date(ano, i, 1);
+      const mesEnd = new Date(ano, i + 1, 0);
+      if (okr.dataInicio && okr.dataFim) {
+        const ini = new Date(okr.dataInicio);
+        const fim = new Date(okr.dataFim);
+        if (mesStart > fim || mesEnd < ini) return null;
+      }
+      return meses[String(i)];
+    }).filter(Boolean);
+  }, [okr.dataInicio, okr.dataFim, meses]);
+
+  // Calcular valor atual automaticamente por tipo de KR
   const getValorAtual = (kr) => {
     const nome = kr.nome.toLowerCase();
-    let total = 0;
-    Object.values(meses).forEach((m) => {
+
+    if (nome.includes("nps")) return parseN(kr.npsManual || "");
+
+    let fatTotal = 0, inv = 0, lucro = 0;
+    mesesNoPeriodo.forEach((m) => {
       const met = calcMetricas(m.funil);
       const fin = calcFinanceiro(m.financeiro, met.inv);
-      if (nome.includes("receita")) total += fin.fatTotal;
-      else if (nome.includes("roas")) total += met.inv > 0 ? fin.fatTotal / met.inv : 0;
-      else if (nome.includes("lucro líquido")) total += fin.lucro1;
-      else if (nome.includes("margem")) total += fin.lucro1;
-      else if (nome.includes("conversão") || nome.includes("conv")) total += met.conv;
+      fatTotal += fin.fatTotal;
+      inv += met.inv;
+      lucro += fin.lucro1;
     });
-    return parseN(kr.semanal?.slice(-1)[0]) || total;
+
+    if (nome.includes("receita")) return fatTotal;
+    if (nome.includes("roas")) return inv > 0 ? fatTotal / inv : 0;
+    if (nome.includes("lucro")) return lucro;
+    if (nome.includes("margem")) return fatTotal > 0 ? (lucro / fatTotal) * 100 : 0;
+    if (nome.includes("churn")) {
+      const cancelados = systemClients.filter((c) => {
+        if (!c.end_date) return false;
+        if (okr.dataInicio && c.end_date < okr.dataInicio) return false;
+        if (okr.dataFim && c.end_date > okr.dataFim) return false;
+        return true;
+      }).length;
+      const total = systemClients.length;
+      return total > 0 ? (cancelados / total) * 100 : 0;
+    }
+    return 0;
   };
+
+  const formatValor = (kr, val) => {
+    const nome = kr.nome.toLowerCase();
+    if (nome.includes("churn") || nome.includes("margem")) return fmtPct(val);
+    if (nome.includes("roas")) return `${Number(val).toFixed(2)}x`;
+    if (nome.includes("nps") || nome.includes("#")) return fmtNum(val);
+    return fmtBRL(val);
+  };
+
+  const isNPS = (kr) => kr.nome.toLowerCase().includes("nps");
+  const isAuto = (kr) => !isNPS(kr);
+
+  const COLOR_CLASSES = {
+    emerald: { bg: "bg-emerald-500", text: "text-emerald-600", card: "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800" },
+    amber:   { bg: "bg-amber-500",   text: "text-amber-600",   card: "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800" },
+    red:     { bg: "bg-red-500",     text: "text-red-600",     card: "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800" },
+  };
+  const colorKey = (pct) => pct >= 80 ? "emerald" : pct >= 50 ? "amber" : "red";
+
+  // Medidor geral
+  const krsComMeta = okr.keyResults.filter((kr) => parseN(kr.meta) > 0);
+  const avgPct = krsComMeta.length > 0
+    ? krsComMeta.reduce((sum, kr) => {
+        const atual = getValorAtual(kr);
+        return sum + Math.min((atual / parseN(kr.meta)) * 100, 100);
+      }, 0) / krsComMeta.length
+    : 0;
+
+  const statusColors = COLOR_CLASSES[colorKey(avgPct)];
+  const statusMsg = avgPct >= 80
+    ? "🟢 Trimestre no caminho certo!"
+    : avgPct >= 50
+    ? "🟡 Atenção: alguns KRs precisam de ajuste"
+    : "🔴 Período crítico: reveja suas metas";
 
   return (
     <div>
-      {/* Campos de texto */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {[
-          { label: "Proposta de Valor", key: "valorProposta", placeholder: 'Ajudamos [PESSOAS] a alcançar [OBJETIVO]' },
-          { label: "Visão 12 Meses", key: "visao12", placeholder: "Onde a empresa estará em 12 meses?" },
-          { label: "Visão 3 Meses", key: "visao3", placeholder: "O que conquista em 3 meses?" },
-          { label: "Objetivo do Trimestre", key: "objetivo", placeholder: "Qual o foco deste trimestre?" },
-        ].map(({ label, key, placeholder }) => (
-          <div key={key}>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">{label}</label>
-            <textarea
-              value={okr[key]}
-              onChange={(e) => onChange({ ...okr, [key]: e.target.value })}
-              placeholder={placeholder}
-              rows={2}
-              className="w-full text-sm bg-blue-50 dark:bg-blue-950/20 border border-border rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
-        ))}
+      {/* Seletor de Período */}
+      <div className="flex flex-wrap items-end gap-3 mb-6">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">Data de Início</label>
+          <label className="block text-xs text-muted-foreground mb-1">Início do período</label>
           <input
             type="date"
-            value={okr.dataInicio}
+            value={okr.dataInicio || ""}
             onChange={(e) => onChange({ ...okr, dataInicio: e.target.value })}
-            className="w-full text-sm bg-blue-50 dark:bg-blue-950/20 border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
+            className="text-sm bg-blue-50 dark:bg-blue-950/20 border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
+        <span className="text-muted-foreground text-sm pb-2">→</span>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">Periodicidade de acompanhamento (dias)</label>
+          <label className="block text-xs text-muted-foreground mb-1">Fim do período</label>
           <input
-            type="number"
-            value={okr.periodicidade}
-            onChange={(e) => onChange({ ...okr, periodicidade: parseInt(e.target.value) || 7 })}
-            className="w-full text-sm bg-blue-50 dark:bg-blue-950/20 border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
+            type="date"
+            value={okr.dataFim || ""}
+            onChange={(e) => onChange({ ...okr, dataFim: e.target.value })}
+            className="text-sm bg-blue-50 dark:bg-blue-950/20 border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
+        {okr.dataInicio && okr.dataFim && (
+          <span className="text-xs text-muted-foreground pb-2">
+            {mesesNoPeriodo.length} {mesesNoPeriodo.length === 1 ? "mês" : "meses"} no período
+          </span>
+        )}
       </div>
 
-      {/* Tabela KRs */}
+      {/* Medidor Geral */}
+      {krsComMeta.length > 0 && (
+        <div className={`rounded-xl p-5 mb-6 border ${statusColors.card}`}>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-semibold">{statusMsg}</span>
+            <span className={`text-3xl font-bold ${statusColors.text}`}>{fmtPct(avgPct, 0)}</span>
+          </div>
+          <div className="h-3 bg-white/60 dark:bg-black/20 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${statusColors.bg}`}
+              style={{ width: `${Math.min(avgPct, 100)}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">{krsComMeta.length} KRs com meta definida</p>
+        </div>
+      )}
+
+      {/* Cards KRs */}
       <SectionTitle>Key Results</SectionTitle>
-      <div className="overflow-x-auto rounded-xl border border-border">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="bg-muted/60 border-b border-border">
-              <th className="text-left px-3 py-2 font-medium min-w-[140px]">KR</th>
-              <th className="text-left px-3 py-2 font-medium min-w-[160px]">Fórmula</th>
-              <th className="text-center px-3 py-2 font-medium w-24">Base</th>
-              <th className="text-center px-3 py-2 font-medium w-24">Meta</th>
-              <th className="text-center px-3 py-2 font-medium w-24">Atual</th>
-              <th className="text-center px-3 py-2 font-medium min-w-[140px]">% Atingimento</th>
-              {semanas.map((s, i) => (
-                <th key={i} className="text-center px-2 py-2 font-medium w-20 whitespace-nowrap">{s}</th>
-              ))}
-              <th className="w-8" />
-            </tr>
-          </thead>
-          <tbody>
-            {okr.keyResults.map((kr, idx) => {
-              const atual = getValorAtual(kr);
-              return (
-                <tr key={kr.id} className="border-b border-border last:border-0 hover:bg-muted/20">
-                  <td className="px-3 py-1.5">
-                    <input
-                      value={kr.nome}
-                      onChange={(e) => updateKR(idx, "nome", e.target.value)}
-                      className="w-full bg-blue-50 dark:bg-blue-950/20 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+        {okr.keyResults.map((kr, idx) => {
+          const atual = getValorAtual(kr);
+          const meta = parseN(kr.meta);
+          const pct = meta > 0 ? Math.min((atual / meta) * 100, 100) : 0;
+          const auto = isAuto(kr);
+          const nps = isNPS(kr);
+          const cardColors = COLOR_CLASSES[colorKey(pct)];
+
+          return (
+            <div key={kr.id} className="bg-card border border-border rounded-xl p-4 relative flex flex-col gap-3">
+              {/* Nome editável + delete */}
+              <div className="flex items-start gap-1 pr-6">
+                <input
+                  value={kr.nome}
+                  onChange={(e) => updateKR(idx, "nome", e.target.value)}
+                  className="flex-1 text-xs font-semibold bg-transparent border-0 outline-none text-muted-foreground"
+                />
+                <button
+                  onClick={() => removeKR(idx)}
+                  className="absolute top-3 right-3 text-muted-foreground hover:text-destructive flex-shrink-0"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+
+              {/* Valor atual */}
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-bold tracking-tight">{formatValor(kr, atual)}</span>
+                  {auto && (
+                    <RefreshCw size={11} className="text-primary flex-shrink-0" title="Calculado automaticamente do sistema" />
+                  )}
+                </div>
+                {nps && (
+                  <input
+                    type="number"
+                    value={kr.npsManual || ""}
+                    onChange={(e) => updateKR(idx, "npsManual", e.target.value)}
+                    placeholder="Digite o NPS manualmente"
+                    className="mt-1.5 w-full text-xs bg-blue-50 dark:bg-blue-950/20 border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                )}
+              </div>
+
+              {/* Meta */}
+              <div>
+                <label className="text-[10px] text-muted-foreground">Meta</label>
+                <input
+                  type="number"
+                  value={kr.meta || ""}
+                  onChange={(e) => updateKR(idx, "meta", e.target.value)}
+                  placeholder="Defina sua meta"
+                  className="w-full mt-0.5 text-xs bg-blue-50 dark:bg-blue-950/20 border border-border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              {/* Barra de progresso */}
+              {meta > 0 && (
+                <div>
+                  <div className="flex justify-between text-[10px] mb-1">
+                    <span className="text-muted-foreground">Atingimento</span>
+                    <span className={`font-semibold ${cardColors.text}`}>{fmtPct(pct, 0)}</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${cardColors.bg}`}
+                      style={{ width: `${pct}%` }}
                     />
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <input
-                      value={kr.formula}
-                      onChange={(e) => updateKR(idx, "formula", e.target.value)}
-                      className="w-full bg-blue-50 dark:bg-blue-950/20 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <CellInput value={kr.base} onChange={(v) => updateKR(idx, "base", v)} />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <CellInput value={kr.meta} onChange={(v) => updateKR(idx, "meta", v)} />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <ReadCell value={fmtNum(atual)} />
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <ProgressBar valor={atual} meta={parseN(kr.meta)} />
-                  </td>
-                  {semanas.map((_, si) => (
-                    <td key={si} className="px-1 py-1.5">
-                      <CellInput
-                        value={kr.semanal?.[si] ?? ""}
-                        onChange={(v) => updateKRSemanal(idx, si, v)}
-                      />
-                    </td>
-                  ))}
-                  <td className="px-2 py-1.5">
-                    <button onClick={() => removeKR(idx)} className="text-muted-foreground hover:text-destructive">
-                      <Trash2 size={12} />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
-      <button
-        onClick={addKR}
-        className="mt-3 flex items-center gap-1.5 text-xs text-primary hover:underline"
-      >
+
+      <button onClick={addKR} className="flex items-center gap-1.5 text-xs text-primary hover:underline">
         <Plus size={13} /> Adicionar KR
       </button>
     </div>
@@ -938,7 +997,7 @@ export default function OKRSheet({ onBack }) {
           .map(([origin, v]) => ({ origin, ...v }))
           .sort((a, b) => b.count - a.count);
 
-        setSystemData({ mrr, faturamentoUnico, conversoes, clientsByOrigin });
+        setSystemData({ mrr, faturamentoUnico, conversoes, clientsByOrigin, clients });
       } catch {}
     };
     fetchSystemData();
@@ -992,7 +1051,7 @@ export default function OKRSheet({ onBack }) {
       {/* Conteúdo */}
       <div className="bg-card border border-border rounded-xl p-4 md:p-6">
         {abaAtiva === "okr" && (
-          <AbaOKR okr={data.okr} onChange={updateOKR} meses={data.meses} />
+          <AbaOKR okr={data.okr} onChange={updateOKR} meses={data.meses} systemClients={systemData?.clients || []} />
         )}
         {MESES.map((_, i) =>
           abaAtiva === String(i) ? (
