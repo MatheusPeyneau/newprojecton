@@ -1734,6 +1734,7 @@ async def get_mrr_trend(current_user: dict = Depends(get_current_user)):
         return f"{year:04d}-{month:02d}-01"
 
     now_iso = now.isoformat()
+    current_month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc).isoformat()
     trend = []
     # 5 months back → 3 months ahead (9 points total)
     for delta in range(-5, 4):
@@ -1741,8 +1742,12 @@ async def get_mrr_trend(current_user: dict = Depends(get_current_user)):
         year, month = total // 12, total % 12 + 1
         end_iso = _month_end_iso(year, month)
         start_str = _month_start_str(year, month)
+        month_start_iso = datetime(year, month, 1, tzinfo=timezone.utc).isoformat()
         label = datetime(year, month, 1).strftime("%b/%y")
-        is_future = end_iso > now_iso
+
+        # A month is "future" only if it hasn't started yet
+        is_future = month_start_iso > now_iso
+        is_current = month_start_iso == current_month_start
 
         mrr_snap = sum(
             c.get("monthly_value", 0) for c in clients
@@ -1753,14 +1758,11 @@ async def get_mrr_trend(current_user: dict = Depends(get_current_user)):
 
         if is_future:
             trend.append({"month": label, "mrr": None, "projected": value})
+        elif is_current:
+            # Current month: show in both lines to connect them
+            trend.append({"month": label, "mrr": value, "projected": value})
         else:
             trend.append({"month": label, "mrr": value, "projected": None})
-
-    # Connect current month: set projected = mrr so lines don't break
-    for i, point in enumerate(trend):
-        if point["mrr"] is not None and (i + 1 < len(trend)) and trend[i + 1]["projected"] is not None:
-            trend[i]["projected"] = point["mrr"]
-            break
 
     return trend
 
