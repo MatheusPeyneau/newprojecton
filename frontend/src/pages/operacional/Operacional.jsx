@@ -13,9 +13,10 @@ import {
 } from "@/components/ui/select";
 import {
   BarChart2, Users, Plus, Trash2, CheckCircle2, LayoutDashboard,
-  Loader2, UserPlus, Check, ChevronDown,
+  Loader2, UserPlus, Check, ChevronDown, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ClientBriefing from "./ClientBriefing";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -71,6 +72,7 @@ function ClientSummaryCard({ item, collaborators, onNavigate }) {
   const [responsible, setResponsible] = useState(responsible_collaborator || null);
   const [open, setOpen] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  const [briefingOpen, setBriefingOpen] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -200,16 +202,36 @@ function ClientSummaryCard({ item, collaborators, onNavigate }) {
       {/* Services */}
       <ServicePills services={services} />
 
-      {/* Action */}
-      <Button
-        size="sm"
-        className="w-full gap-2"
-        onClick={() => onNavigate(client.client_id)}
-        data-testid={`dashboard-btn-${client.client_id}`}
-      >
-        <LayoutDashboard size={14} />
-        Ver Dashboard
-      </Button>
+      {/* Actions */}
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          className="flex-1 gap-2"
+          onClick={() => onNavigate(client.client_id)}
+          data-testid={`dashboard-btn-${client.client_id}`}
+        >
+          <LayoutDashboard size={14} />
+          Ver Dashboard
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5 px-3"
+          onClick={() => setBriefingOpen(true)}
+          title="Informações do cliente"
+        >
+          <FileText size={14} />
+          Briefing
+        </Button>
+      </div>
+
+      {briefingOpen && (
+        <ClientBriefing
+          clientId={client.client_id}
+          clientName={client.name}
+          onClose={() => setBriefingOpen(false)}
+        />
+      )}
     </div>
   );
 }
