@@ -181,7 +181,7 @@ export default function ClientBriefing({ clientId, clientName, onClose }) {
 
       {/* Modal centrado */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:static print:p-0">
-      <div className="w-full max-w-2xl max-h-[90vh] bg-white rounded-2xl shadow-2xl z-50 flex flex-col print:static print:shadow-none print:max-w-full print:max-h-full print:rounded-none">
+      <div className="briefing-print-root w-full max-w-2xl max-h-[90vh] bg-white rounded-2xl shadow-2xl z-50 flex flex-col print:static print:shadow-none print:max-w-full print:max-h-full print:rounded-none">
         {/* Toolbar */}
         <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100 print:hidden">
           <span className="text-xs font-medium text-gray-400 uppercase tracking-widest">Briefing</span>
@@ -415,13 +415,11 @@ export default function ClientBriefing({ clientId, clientName, onClose }) {
       {/* Print styles */}
       <style>{`
         @media print {
-          body > *:not(.briefing-print-root) { display: none !important; }
-          .print\\:hidden { display: none !important; }
-          .fixed { position: static !important; }
-          .overflow-y-auto { overflow: visible !important; }
-          .shadow-2xl { box-shadow: none !important; }
-          .max-w-2xl { max-width: 100% !important; }
-          .bg-black\\/40 { display: none !important; }
+          body { visibility: hidden; }
+          .briefing-print-root { visibility: visible; position: fixed; top: 0; left: 0; width: 100%; max-width: 100% !important; max-height: none !important; border-radius: 0 !important; box-shadow: none !important; overflow: visible !important; }
+          .briefing-print-root * { visibility: visible; }
+          .briefing-print-root .print\\:hidden { display: none !important; }
+          .briefing-print-root .overflow-y-auto { overflow: visible !important; }
         }
       `}</style>
     </>
