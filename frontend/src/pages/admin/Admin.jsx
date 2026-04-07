@@ -8,7 +8,7 @@ import { Loader2, ShieldCheck, Users, Briefcase, TrendingUp } from "lucide-react
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 function getAuthHeader() {
-  return { Authorization: `Bearer ${localStorage.getItem("agenciaos_token")}` };
+  return { Authorization: `Bearer ${localStorage.getItem("fluxscale_token")}` };
 }
 
 const PLAN_COLORS = {

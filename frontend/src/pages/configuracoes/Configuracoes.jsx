@@ -12,7 +12,7 @@ import { Settings, Sun, Moon, Globe, Bot, Zap, FlaskConical, CheckCircle2, XCirc
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 function getAuthHeader() {
-  return { Authorization: `Bearer ${localStorage.getItem("agenciaos_token")}` };
+  return { Authorization: `Bearer ${localStorage.getItem("fluxscale_token")}` };
 }
 
 export function WebhookSection({ title, icon: Icon, description, settingKey, testLabel, payloadPreview }) {

@@ -32,7 +32,7 @@ import { toast } from "sonner";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function getAuthHeader() {
-  const token = localStorage.getItem("agenciaos_token");
+  const token = localStorage.getItem("fluxscale_token");
   return { Authorization: `Bearer ${token}` };
 }
 

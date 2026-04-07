@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 function getAuthHeader() {
-  return { Authorization: `Bearer ${localStorage.getItem("agenciaos_token")}` };
+  return { Authorization: `Bearer ${localStorage.getItem("fluxscale_token")}` };
 }
 function formatCurrency(v) {
   return v > 0 ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v) : null;

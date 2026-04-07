@@ -1,5 +1,5 @@
 """
-AgenciaOS - Backend API Tests
+FluxScale - Backend API Tests
 Testing: Leads/Pipeline, Pipeline Stages, Operational Cards, Content/Carousel, Settings
 """
 import pytest
@@ -12,7 +12,7 @@ BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 def auth_token():
     # Register user
     r = requests.post(f"{BASE_URL}/api/auth/register", json={
-        "email": "testuser@agenciaos.com",
+        "email": "testuser@fluxscale.com",
         "password": "test123",
         "name": "Test User"
     })
@@ -20,7 +20,7 @@ def auth_token():
         return r.json().get("token") or r.json().get("access_token")
     # Try login if already exists
     r = requests.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "testuser@agenciaos.com",
+        "email": "testuser@fluxscale.com",
         "password": "test123"
     })
     assert r.status_code == 200, f"Auth failed: {r.text}"

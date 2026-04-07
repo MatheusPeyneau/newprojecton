@@ -42,7 +42,7 @@ PLAN_LIMITS = {
     "pro":     {"clients": -1, "carousels_month": -1, "leads": -1,  "members": -1},
 }
 
-app = FastAPI(title="AgênciaOS API")
+app = FastAPI(title="FluxScale API")
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -1025,9 +1025,9 @@ async def test_webhook(current_user: dict = Depends(get_current_user)):
     month = now.month % 12 + 1
     year = now.year + (1 if now.month == 12 else 0)
     test_payload = {
-        "name": "Cliente Teste AgênciaOS",
+        "name": "Cliente Teste FluxScale",
         "cpfCnpj": "00000000000000",
-        "email": "teste@agenciaos.com",
+        "email": "teste@fluxscale.com",
         "mobilePhone": "11999999999",
         "billingType": "BOLETO",
         "value": 500.00,
@@ -2864,7 +2864,7 @@ async def save_whatsapp_webhook_settings(body: WhatsAppWebhookSettings, current_
     return {"message": "Configuração salva", "webhook_url": body.webhook_url, "enabled": body.enabled}
 
 
-# ============= PUBLIC WEBHOOK — N8N → AgênciaOS =============
+# ============= PUBLIC WEBHOOK — N8N → FluxScale =============
 
 def normalize_source(raw: str) -> str:
     """Normalize source string to match frontend SOURCES values."""
@@ -2915,7 +2915,7 @@ async def receive_whatsapp_lead(body: WhatsAppLeadPayload, token: str = ""):
     return {"success": True, "lead_id": lead_id, "source": normalize_source(body.source), "name": body.name}
 
 
-# ============= PUBLIC WEBHOOK — Instagram → AgênciaOS =============
+# ============= PUBLIC WEBHOOK — Instagram → FluxScale =============
 
 class InstagramLeadPayload(BaseModel):
     name: str

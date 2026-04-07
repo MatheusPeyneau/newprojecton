@@ -64,7 +64,7 @@ export default function Login() {
           <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center mb-4 shadow-lg">
             <Zap size={22} className="text-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-heading font-bold tracking-tight">AgênciaOS</h1>
+          <h1 className="text-3xl font-heading font-bold tracking-tight">FluxScale</h1>
           <p className="text-muted-foreground text-sm mt-1">
             Plataforma de automação para agências
           </p>

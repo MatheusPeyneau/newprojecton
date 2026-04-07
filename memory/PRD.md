@@ -1,4 +1,4 @@
-# AgênciaOS - PRD
+# FluxScale - PRD
 
 ## Visão Geral
 Sistema de gestão para agências digitais — CRM, pipeline de vendas, financeiro, operacional, RH, conteúdo, WhatsApp e Instagram integrados.

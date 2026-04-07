@@ -7,11 +7,11 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(() => localStorage.getItem("agenciaos_token"));
+  const [token, setToken] = useState(() => localStorage.getItem("fluxscale_token"));
   const [loading, setLoading] = useState(true);
 
   const checkAuth = useCallback(async () => {
-    const storedToken = localStorage.getItem("agenciaos_token");
+    const storedToken = localStorage.getItem("fluxscale_token");
     if (!storedToken) {
       setLoading(false);
       return;
@@ -23,7 +23,7 @@ export function AuthProvider({ children }) {
       setUser(res.data);
       setToken(storedToken);
     } catch {
-      localStorage.removeItem("agenciaos_token");
+      localStorage.removeItem("fluxscale_token");
       setToken(null);
       setUser(null);
     }
@@ -41,13 +41,13 @@ export function AuthProvider({ children }) {
   }, [checkAuth]);
 
   const login = useCallback((newToken, userData) => {
-    localStorage.setItem("agenciaos_token", newToken);
+    localStorage.setItem("fluxscale_token", newToken);
     setToken(newToken);
     setUser(userData);
   }, []);
 
   const logout = useCallback(async () => {
-    const storedToken = localStorage.getItem("agenciaos_token");
+    const storedToken = localStorage.getItem("fluxscale_token");
     try {
       await axios.post(
         `${API}/auth/logout`,
@@ -57,7 +57,7 @@ export function AuthProvider({ children }) {
     } catch {
       // ignore logout error
     }
-    localStorage.removeItem("agenciaos_token");
+    localStorage.removeItem("fluxscale_token");
     setToken(null);
     setUser(null);
   }, []);

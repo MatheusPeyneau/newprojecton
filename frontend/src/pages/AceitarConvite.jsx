@@ -33,7 +33,7 @@ export default function AceitarConvite() {
       const res = await axios.post(`${API}/auth/accept-invite?token=${token}&password=${encodeURIComponent(password)}`);
       const jwt = res.data.token;
       if (jwt) {
-        localStorage.setItem("agenciaos_token", jwt);
+        localStorage.setItem("fluxscale_token", jwt);
         toast.success("Conta criada! Bem-vindo à organização.");
         navigate("/dashboard");
       }
@@ -58,7 +58,7 @@ export default function AceitarConvite() {
           <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center mb-4">
             <Zap size={24} className="text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold">AgênciaOS</h1>
+          <h1 className="text-2xl font-bold">FluxScale</h1>
           <p className="text-sm text-muted-foreground mt-1">Aceitar convite</p>
         </div>
 

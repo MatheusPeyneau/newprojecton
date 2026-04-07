@@ -139,7 +139,7 @@ export default function Sidebar({ onClose }) {
               className="font-heading font-bold tracking-tight"
               style={{ fontSize: "15px", color: "hsl(var(--foreground))" }}
             >
-              AgênciaOS
+              FluxScale
             </span>
             <span style={{ fontSize: "11px", color: "hsl(var(--sidebar-item-normal-text))", letterSpacing: "0.2px" }}>
               Painel de Gestão

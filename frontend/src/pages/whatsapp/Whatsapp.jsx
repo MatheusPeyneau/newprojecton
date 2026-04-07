@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 function getAuthHeader() {
-  return { Authorization: `Bearer ${localStorage.getItem("agenciaos_token")}` };
+  return { Authorization: `Bearer ${localStorage.getItem("fluxscale_token")}` };
 }
 
 function AgentCard({ agent, onToggle, onEdit, onDelete, loading }) {
@@ -310,7 +310,7 @@ export default function Whatsapp() {
           URL para configurar no N8N
         </p>
         <p className="text-xs text-muted-foreground mb-2">
-          Configure esta URL no seu fluxo N8N para que as mensagens do WhatsApp criem leads automaticamente em AgênciaOS:
+          Configure esta URL no seu fluxo N8N para que as mensagens do WhatsApp criem leads automaticamente em FluxScale:
         </p>
         <div className="flex items-center gap-2">
           <code className="flex-1 text-xs bg-background border border-border rounded px-3 py-2 font-mono truncate text-foreground" data-testid="webhook-url-display">

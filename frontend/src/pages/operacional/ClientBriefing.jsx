@@ -3,7 +3,7 @@ import { X, ChevronDown, ChevronRight, Printer } from "lucide-react";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const storageKey = (clientId) => `agenciaos_briefing_${clientId}`;
+const storageKey = (clientId) => `fluxscale_briefing_${clientId}`;
 
 function makeDefault() {
   return {

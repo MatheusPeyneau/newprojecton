@@ -5,13 +5,13 @@ import {
 } from "recharts";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem("agenciaos_token")}` });
+const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem("fluxscale_token")}` });
 
 // ─── Utilitários ────────────────────────────────────────────────────────────
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const MESES_COMPLETOS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-const STORAGE_KEY = "agenciaos_okr_data";
+const STORAGE_KEY = "fluxscale_okr_data";
 
 const fmtBRL = (v) =>
   Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

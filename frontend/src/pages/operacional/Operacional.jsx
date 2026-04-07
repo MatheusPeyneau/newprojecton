@@ -21,7 +21,7 @@ import ClientBriefing from "./ClientBriefing";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function getAuthHeader() {
-  const token = localStorage.getItem("agenciaos_token");
+  const token = localStorage.getItem("fluxscale_token");
   return { Authorization: `Bearer ${token}` };
 }
 
@@ -391,11 +391,11 @@ export default function Operacional() {
   const handleManagerChange = (value) => {
     setSelectedManager(value);
     fetchData(value);
-    localStorage.setItem("agenciaos_manager_filter", value);
+    localStorage.setItem("fluxscale_manager_filter", value);
   };
 
   useEffect(() => {
-    const saved = localStorage.getItem("agenciaos_manager_filter");
+    const saved = localStorage.getItem("fluxscale_manager_filter");
     if (saved) { setSelectedManager(saved); fetchData(saved); }
     else fetchData();
   }, []);
