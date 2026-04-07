@@ -264,8 +264,13 @@ function AbaOKR({ okr, onChange, meses, systemClients = [] }) {
         if (okr.dataFim && c.end_date > okr.dataFim) return false;
         return true;
       }).length;
-      const total = systemClients.length;
-      return total > 0 ? (cancelados / total) * 100 : 0;
+      const ativosNoPeriodo = systemClients.filter((c) => {
+        if (okr.dataFim && c.start_date && c.start_date > okr.dataFim) return false;
+        if (okr.dataInicio && c.end_date && c.end_date < okr.dataInicio) return false;
+        return true;
+      }).length;
+      const total = ativosNoPeriodo || 1;
+      return (cancelados / total) * 100;
     }
     return 0;
   };
@@ -862,7 +867,7 @@ function AbaResumo({ meses, systemClients = [] }) {
       const mesEnd = `${ano}-${String(i + 1).padStart(2, "0")}-${String(new Date(ano, i + 1, 0).getDate()).padStart(2, "0")}`;
       return systemClients
         .filter((c) => {
-          if (c.status !== "ativo" && !c.end_date) return false;
+          if (c.status !== "ativo") return false;
           if (c.start_date && c.start_date > mesEnd) return false;
           if (c.end_date && c.end_date < mesStart) return false;
           if (c.client_type === "pontual") return (c.start_date || "").startsWith(`${ano}-${String(i + 1).padStart(2, "0")}`);
