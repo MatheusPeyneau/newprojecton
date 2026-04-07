@@ -37,14 +37,14 @@ export function InlineSelect({ value, options, onChange, className }) {
 export function StatusBadge({ status, onUpdate }) {
   const cfg = STATUS_CFG[status] || STATUS_CFG.TO_DO;
   const options = Object.entries(STATUS_CFG).map(([k, v]) => ({ value: k, label: v.label }));
-  return <InlineSelect value={status} options={options} onChange={onUpdate} className={cn("text-xs px-2 py-0.5 rounded-full font-medium cursor-pointer", cfg.badge)} />;
+  return <InlineSelect value={status} options={options} onChange={onUpdate} className={cn("text-xs px-2 py-0.5 rounded-full font-medium cursor-pointer", cfg.color)} />;
 }
 
 // ——— Priority Badge ———
 export function PriorityBadge({ priority, onUpdate }) {
   const cfg = PRIORITY_CFG[priority] || PRIORITY_CFG.NORMAL;
   const options = Object.entries(PRIORITY_CFG).map(([k, v]) => ({ value: k, label: v.label }));
-  return <InlineSelect value={priority} options={options} onChange={onUpdate} className={cn("text-xs px-2 py-0.5 rounded-full font-medium cursor-pointer", cfg.badge)} />;
+  return <InlineSelect value={priority} options={options} onChange={onUpdate} className={cn("text-xs px-2 py-0.5 rounded-full font-medium cursor-pointer", cfg.color)} />;
 }
 
 // ——— Assignee Cell ———
