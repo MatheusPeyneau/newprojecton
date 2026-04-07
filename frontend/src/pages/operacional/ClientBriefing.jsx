@@ -179,8 +179,9 @@ export default function ClientBriefing({ clientId, clientName, onClose }) {
         onClick={onClose}
       />
 
-      {/* Panel */}
-      <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-50 flex flex-col print:static print:shadow-none print:max-w-full">
+      {/* Modal centrado */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:static print:p-0">
+      <div className="w-full max-w-2xl max-h-[90vh] bg-white rounded-2xl shadow-2xl z-50 flex flex-col print:static print:shadow-none print:max-w-full print:max-h-full print:rounded-none">
         {/* Toolbar */}
         <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100 print:hidden">
           <span className="text-xs font-medium text-gray-400 uppercase tracking-widest">Briefing</span>
@@ -392,17 +393,23 @@ export default function ClientBriefing({ clientId, clientName, onClose }) {
                 <CheckOpt label="R$ 1.500" checked={d.orcamento_1500} onChange={set("orcamento_1500")} />
                 <CheckOpt label="R$ 3.000" checked={d.orcamento_3000} onChange={set("orcamento_3000")} />
                 <CheckOpt label="R$ 5.000" checked={d.orcamento_5000} onChange={set("orcamento_5000")} />
-                <CheckOpt label="Outros" checked={d.orcamento_outros} onChange={set("orcamento_outros")} />
               </div>
-              {d.orcamento_outros && (
-                <InlineField label="Valor:" value={d.orcamento_outros_val} onChange={set("orcamento_outros_val")} placeholder="R$ ..." />
-              )}
+              <div className="flex items-center gap-3">
+                <CheckOpt label="Outros:" checked={d.orcamento_outros} onChange={set("orcamento_outros")} />
+                <input
+                  value={d.orcamento_outros_val}
+                  onChange={(e) => set("orcamento_outros_val")(e.target.value)}
+                  placeholder="Digite o valor..."
+                  className="flex-1 text-sm text-gray-800 bg-transparent border-0 border-b border-dashed border-gray-300 focus:border-gray-500 focus:outline-none pb-0.5 placeholder:text-gray-300"
+                />
+              </div>
             </div>
 
           </Section>
 
           <div className="h-8" />
         </div>
+      </div>
       </div>
 
       {/* Print styles */}
