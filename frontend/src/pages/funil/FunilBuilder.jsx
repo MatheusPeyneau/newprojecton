@@ -201,6 +201,7 @@ function FunilBuilderInner() {
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             nodeTypes={nodeTypes}
+            connectionMode="loose"
             fitView
             deleteKeyCode="Delete"
           >
