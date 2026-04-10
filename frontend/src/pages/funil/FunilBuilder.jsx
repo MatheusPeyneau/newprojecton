@@ -88,6 +88,31 @@ function QuickAddModal({ position, onAdd, onClose }) {
   const [textValue, setTextValue] = useState("");
   const fileInputRef = useRef(null);
   const modalRef = useRef(null);
+  const isDragging = useRef(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
+
+  const initLeft = Math.min(position.x + 12, window.innerWidth - 290);
+  const initTop  = Math.min(position.y - 20,  window.innerHeight - 380);
+  const [pos, setPos] = useState({ x: initLeft, y: initTop });
+
+  // Drag do modal pelo header
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!isDragging.current) return;
+      setPos({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y });
+    };
+    const onUp = () => { isDragging.current = false; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, []);
+
+  const onHeaderMouseDown = (e) => {
+    if (e.button !== 0) return;
+    isDragging.current = true;
+    dragOffset.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
+    e.preventDefault();
+  };
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -116,9 +141,6 @@ function QuickAddModal({ position, onAdd, onClose }) {
     e.target.value = "";
   };
 
-  const left = Math.min(position.x + 12, window.innerWidth - 290);
-  const top  = Math.min(position.y - 20, window.innerHeight - 380);
-
   const tabBtn = (key, label) => (
     <button
       key={key}
@@ -145,8 +167,8 @@ function QuickAddModal({ position, onAdd, onClose }) {
       ref={modalRef}
       style={{
         position: "fixed",
-        left,
-        top,
+        left: pos.x,
+        top: pos.y,
         zIndex: 1000,
         background: "#fff",
         border: "1px solid #e5e7eb",
@@ -154,12 +176,18 @@ function QuickAddModal({ position, onAdd, onClose }) {
         boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
         width: 272,
         overflow: "hidden",
+        userSelect: "none",
       }}
     >
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", padding: "10px 12px 8px", borderBottom: "1px solid #f3f4f6" }}>
+      {/* Header — arrastável */}
+      <div
+        onMouseDown={onHeaderMouseDown}
+        style={{ display: "flex", alignItems: "center", padding: "10px 12px 8px", borderBottom: "1px solid #f3f4f6", cursor: "grab", background: "#fafafa" }}
+      >
+        <span style={{ fontSize: 11, color: "#9ca3af", marginRight: 6, letterSpacing: 1 }}>⠿</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: "#374151", flex: 1 }}>Adicionar etapa</span>
         <button
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={onClose}
           style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 18, lineHeight: 1, padding: "0 2px" }}
         >
@@ -385,8 +413,9 @@ function FunilBuilderInner() {
         addEdge(
           {
             source: quickAdd.fromNode,
-            sourceHandle: quickAdd.fromHandle,
+            sourceHandle: "right",
             target: id,
+            targetHandle: "left",
             type: "default",
             animated: true,
             style: { stroke: "#3b82f6", strokeWidth: 2 },
