@@ -3,12 +3,14 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   ReactFlow,
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   addEdge,
   useNodesState,
   useEdgesState,
   ReactFlowProvider,
+  MarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -76,9 +78,21 @@ function FunilBuilderInner() {
     }
   };
 
-  // Conectar nós
+  // Conectar nós — edge curva azul com seta
   const onConnect = useCallback(
-    (params) => setEdges((eds) => addEdge({ ...params, animated: true }, eds)),
+    (params) =>
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...params,
+            type: "smoothstep",
+            animated: true,
+            style: { stroke: "#3b82f6", strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#3b82f6" },
+          },
+          eds
+        )
+      ),
     [setEdges]
   );
 
@@ -187,7 +201,7 @@ function FunilBuilderInner() {
             fitView
             deleteKeyCode="Delete"
           >
-            <Background gap={16} size={1} color="#e5e7eb" />
+            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d1d5db" />
             <Controls />
             <MiniMap nodeStrokeWidth={3} zoomable pannable />
           </ReactFlow>
