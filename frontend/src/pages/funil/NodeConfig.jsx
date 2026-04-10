@@ -4,7 +4,7 @@ import { NODE_DEFS } from "./nodeTypes";
 
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
-export default function NodeConfig({ node, onChange, onClose }) {
+export default function NodeConfig({ node, onChange, onClose, onDelete }) {
   const [uploadError, setUploadError] = useState("");
   const fileInputRef = useRef(null);
 
@@ -153,6 +153,17 @@ export default function NodeConfig({ node, onChange, onClose }) {
             className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
+      </div>
+
+      {/* Rodapé — excluir nó */}
+      <div className="px-4 py-3 border-t border-border shrink-0">
+        <button
+          onClick={() => onDelete(node.id)}
+          className="w-full flex items-center justify-center gap-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200 hover:border-red-400 rounded-lg py-2 transition-colors"
+        >
+          <Trash2 size={13} />
+          Excluir etapa
+        </button>
       </div>
     </div>
   );

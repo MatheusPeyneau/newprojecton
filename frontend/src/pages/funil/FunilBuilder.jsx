@@ -11,6 +11,10 @@ import {
   useEdgesState,
   ReactFlowProvider,
   MarkerType,
+  BaseEdge,
+  EdgeLabelRenderer,
+  getBezierPath,
+  useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -27,6 +31,55 @@ const authHeaders = () => ({
 
 let nodeIdCounter = 1;
 const newId = () => `node_${Date.now()}_${nodeIdCounter++}`;
+
+// ─── Edge com botão de deletar ao clicar ──────────────────────────────────────
+
+function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style, markerEnd, selected }) {
+  const { setEdges } = useReactFlow();
+  const [edgePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+
+  return (
+    <>
+      <BaseEdge path={edgePath} markerEnd={markerEnd} style={style} />
+      <EdgeLabelRenderer>
+        {selected && (
+          <div
+            style={{
+              position: "absolute",
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              pointerEvents: "all",
+            }}
+            className="nodrag nopan"
+          >
+            <button
+              onClick={() => setEdges((eds) => eds.filter((e) => e.id !== id))}
+              style={{
+                width: 20,
+                height: 20,
+                borderRadius: "50%",
+                background: "#ef4444",
+                color: "white",
+                border: "2px solid #fff",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 12,
+                fontWeight: "bold",
+                lineHeight: 1,
+                boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+      </EdgeLabelRenderer>
+    </>
+  );
+}
+
+const edgeTypes = { default: DeletableEdge };
 
 function FunilBuilderInner() {
   const { funnelId } = useParams();
@@ -88,7 +141,7 @@ function FunilBuilderInner() {
         addEdge(
           {
             ...params,
-            type: "smoothstep",
+            type: "default",
             animated: true,
             style: { stroke: "#3b82f6", strokeWidth: 2 },
             markerEnd: { type: MarkerType.ArrowClosed, color: "#3b82f6" },
@@ -141,6 +194,13 @@ function FunilBuilderInner() {
       prev?.id === nodeId ? { ...prev, data: { ...prev.data, ...patch } } : prev
     );
   }, [setNodes]);
+
+  // Excluir nó e suas arestas
+  const deleteNode = useCallback((nodeId) => {
+    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+    setSelectedNode(null);
+  }, [setNodes, setEdges]);
 
   if (loading) {
     return (
@@ -201,6 +261,7 @@ function FunilBuilderInner() {
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             connectionMode="loose"
             fitView
             deleteKeyCode="Delete"
@@ -216,6 +277,7 @@ function FunilBuilderInner() {
             node={selectedNode}
             onChange={updateNodeData}
             onClose={() => setSelectedNode(null)}
+            onDelete={deleteNode}
           />
         )}
       </div>
