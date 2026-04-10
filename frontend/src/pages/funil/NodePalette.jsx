@@ -1,7 +1,6 @@
 import React from "react";
 import { NODE_DEFS } from "./nodeTypes";
 
-// Agrupa os nós por categoria
 const grouped = NODE_DEFS.reduce((acc, def) => {
   if (!acc[def.category]) acc[def.category] = [];
   acc[def.category].push(def);
@@ -36,12 +35,14 @@ export default function NodePalette() {
                   onDragStart={(e) => onDragStart(e, def.type)}
                   className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg border border-border bg-background hover:bg-muted cursor-grab active:cursor-grabbing select-none transition-colors"
                 >
-                  {/* Mini círculo com cor */}
                   <div
-                    className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 border-2 border-white shadow-sm"
-                    style={{ background: def.bg }}
+                    className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 border-2 border-white"
+                    style={{
+                      background: def.bg,
+                      boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                    }}
                   >
-                    <span style={{ fontSize: 14, lineHeight: 1 }}>{def.emoji}</span>
+                    <def.Icon size={14} color="white" />
                   </div>
                   <span className="text-xs font-medium text-foreground leading-tight">
                     {def.label}

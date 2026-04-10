@@ -39,12 +39,11 @@ export default function NodeConfig({ node, onChange, onClose }) {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
-          {/* Mini círculo colorido */}
           <div
             className="w-6 h-6 rounded-full flex items-center justify-center border border-white shadow-sm shrink-0"
             style={{ background: def?.bg || "#64748b" }}
           >
-            <span style={{ fontSize: 12, lineHeight: 1 }}>{def?.emoji || "📦"}</span>
+            {def?.Icon && <def.Icon size={12} color="white" />}
           </div>
           <span className="text-sm font-semibold text-foreground truncate">
             {def?.label || node.type}
