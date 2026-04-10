@@ -20,6 +20,8 @@ import ConfiguracoesIntegracoes from "@/pages/configuracoes/ConfiguracoesIntegra
 import Whatsapp from "@/pages/whatsapp/Whatsapp";
 import AceitarConvite from "@/pages/AceitarConvite";
 import Admin from "@/pages/admin/Admin";
+import FunilList from "@/pages/funil/FunilList";
+import FunilBuilder from "@/pages/funil/FunilBuilder";
 import "@/App.css";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -58,7 +60,16 @@ function AppRouter() {
         <Route path="configuracoes/membros" element={<ConfiguracoesMembros />} />
         <Route path="configuracoes/integracoes" element={<ConfiguracoesIntegracoes />} />
         <Route path="admin" element={<Admin />} />
+        <Route path="funil" element={<FunilList />} />
       </Route>
+      <Route
+        path="/funil/:funnelId"
+        element={
+          <ProtectedRoute>
+            <FunilBuilder />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );

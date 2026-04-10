@@ -16,6 +16,7 @@ import {
   ChevronDown,
   Building2,
   ShieldCheck,
+  GitBranch,
 } from "lucide-react";
 
 const allNavItems = [
@@ -33,6 +34,7 @@ const allNavItems = [
   { label: "Conteúdo",     icon: Image,           href: "/conteudo",        testId: "nav-conteudo",      module: "conteudo" },
   { label: "WhatsApp",     icon: MessageCircle,   href: "/whatsapp",        testId: "nav-whatsapp",      module: "whatsapp" },
   { label: "RH",           icon: UserCog,         href: "/rh",              testId: "nav-rh",            module: "rh" },
+  { label: "Funil",        icon: GitBranch,       href: "/funil",           testId: "nav-funil",         module: "funil" },
   {
     label: "Configurações", icon: Settings, testId: "nav-configuracoes", module: null,
     children: [

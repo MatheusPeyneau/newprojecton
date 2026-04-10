@@ -249,6 +249,15 @@ class WebhookSettings(BaseModel):
     webhook_url: str
     enabled: bool = True
 
+# ── Funnel Builder ────────────────────────────────────────────────────────────
+class FunnelCreate(BaseModel):
+    name: str = Field(..., max_length=255)
+    flow_data: dict = {}
+
+class FunnelUpdate(BaseModel):
+    name: Optional[str] = Field(None, max_length=255)
+    flow_data: Optional[dict] = None
+
 class AIRequest(BaseModel):
     prompt: str
     context: Optional[Dict[str, Any]] = None
@@ -3339,6 +3348,59 @@ async def startup_event():
         ]
         await db.pipeline_stages.insert_many(default_stages)
         logger.info("Pipeline stages seeded successfully")
+
+
+# ── Funnel Builder endpoints ──────────────────────────────────────────────────
+
+@api_router.post("/funnels", status_code=201)
+async def create_funnel(body: FunnelCreate, current_user: dict = Depends(get_current_user)):
+    funnel_id = f"funnel_{uuid.uuid4().hex[:10]}"
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "funnel_id": funnel_id,
+        "name": body.name,
+        "flow_data": body.flow_data,
+        "org_id": current_user["org_id"],
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.funnels.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+@api_router.get("/funnels")
+async def list_funnels(current_user: dict = Depends(get_current_user)):
+    cursor = db.funnels.find({"org_id": current_user["org_id"]}, {"_id": 0}).sort("created_at", -1)
+    return await cursor.to_list(length=200)
+
+
+@api_router.get("/funnels/{funnel_id}")
+async def get_funnel(funnel_id: str, current_user: dict = Depends(get_current_user)):
+    doc = await db.funnels.find_one({"funnel_id": funnel_id, "org_id": current_user["org_id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Funil não encontrado")
+    return doc
+
+
+@api_router.put("/funnels/{funnel_id}")
+async def update_funnel(funnel_id: str, body: FunnelUpdate, current_user: dict = Depends(get_current_user)):
+    doc = await db.funnels.find_one({"funnel_id": funnel_id, "org_id": current_user["org_id"]})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Funil não encontrado")
+    update = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if body.name is not None:
+        update["name"] = body.name
+    if body.flow_data is not None:
+        update["flow_data"] = body.flow_data
+    await db.funnels.update_one({"funnel_id": funnel_id, "org_id": current_user["org_id"]}, {"$set": update})
+    return {**{k: v for k, v in doc.items() if k != "_id"}, **update}
+
+
+@api_router.delete("/funnels/{funnel_id}", status_code=204)
+async def delete_funnel(funnel_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.funnels.delete_one({"funnel_id": funnel_id, "org_id": current_user["org_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Funil não encontrado")
 
 
 @app.on_event("shutdown")
