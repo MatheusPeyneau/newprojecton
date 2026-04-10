@@ -33,21 +33,28 @@ function CircleNode({ data, Icon, bg, defaultLabel }) {
   const hasImage = Boolean(data.imageB64);
 
   return (
-    <div className="flex flex-col items-center" style={{ minWidth: 80 }}>
+    <div style={{ position: "relative", display: "inline-flex", flexDirection: "column", alignItems: "center", minWidth: 80, paddingTop: 6, paddingBottom: 6 }}>
+      {/* Handle de entrada — topo */}
       <Handle
         type="target"
         position={Position.Top}
-        style={{ background: "#94a3b8", width: 8, height: 8, top: -4 }}
+        style={{ background: "#94a3b8", width: 10, height: 10, border: "2px solid #fff", top: 0 }}
       />
 
+      {/* Círculo com ícone */}
       <div
-        className="flex items-center justify-center rounded-full border-2 border-white"
         style={{
           width: 56,
           height: 56,
+          borderRadius: "50%",
           background: hasImage ? "#fff" : bg,
           overflow: "hidden",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+          border: "2px solid #fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
         }}
       >
         {hasImage ? (
@@ -61,22 +68,27 @@ function CircleNode({ data, Icon, bg, defaultLabel }) {
         )}
       </div>
 
+      {/* Label abaixo */}
       <span
-        className="text-center font-medium leading-tight mt-1.5"
         style={{
+          marginTop: 6,
           fontSize: 11,
+          fontWeight: 500,
           color: "#374151",
+          textAlign: "center",
           maxWidth: 88,
           wordBreak: "break-word",
+          lineHeight: 1.3,
         }}
       >
         {data.label || defaultLabel}
       </span>
 
+      {/* Handle de saída — base */}
       <Handle
         type="source"
         position={Position.Bottom}
-        style={{ background: "#94a3b8", width: 8, height: 8, bottom: -4 }}
+        style={{ background: "#94a3b8", width: 10, height: 10, border: "2px solid #fff", bottom: 0 }}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ReactFlow,
@@ -15,7 +15,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
-import { nodeTypes } from "./nodeTypes";
+import { nodeTypes as NODE_TYPES } from "./nodeTypes";
 import NodePalette from "./NodePalette";
 import NodeConfig from "./NodeConfig";
 
@@ -42,6 +42,9 @@ function FunilBuilderInner() {
 
   const reactFlowWrapper = useRef(null);
   const [rfInstance, setRfInstance] = useState(null);
+
+  // nodeTypes deve ser estável (fora do render) — memo garante referência fixa
+  const nodeTypes = useMemo(() => NODE_TYPES, []);
 
   // Carrega funil da API
   useEffect(() => {
