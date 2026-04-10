@@ -18,8 +18,8 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import { ArrowLeft, Save, Loader2 } from "lucide-react";
-import { nodeTypes as NODE_TYPES } from "./nodeTypes";
+import { ArrowLeft, Save, Loader2, Upload } from "lucide-react";
+import { nodeTypes as NODE_TYPES, NODE_DEFS } from "./nodeTypes";
 import NodePalette from "./NodePalette";
 import NodeConfig from "./NodeConfig";
 
@@ -81,6 +81,186 @@ function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition,
 
 const edgeTypes = { default: DeletableEdge };
 
+// ─── Modal de quick-add (soltar seta no canvas vazio) ─────────────────────────
+
+function QuickAddModal({ position, onAdd, onClose }) {
+  const [tab, setTab] = useState("icons");
+  const [textValue, setTextValue] = useState("");
+  const fileInputRef = useRef(null);
+  const modalRef = useRef(null);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    const onDown = (e) => {
+      if (modalRef.current && !modalRef.current.contains(e.target)) onClose();
+    };
+    const t = setTimeout(() => document.addEventListener("mousedown", onDown), 0);
+    return () => { clearTimeout(t); document.removeEventListener("mousedown", onDown); };
+  }, [onClose]);
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const b64 = ev.target.result.split(",")[1];
+      onAdd("custom", { imageB64: b64, imageType: file.type });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const left = Math.min(position.x + 12, window.innerWidth - 290);
+  const top  = Math.min(position.y - 20, window.innerHeight - 380);
+
+  const tabBtn = (key, label) => (
+    <button
+      key={key}
+      onClick={() => setTab(key)}
+      style={{
+        flex: 1,
+        padding: "5px 0",
+        fontSize: 11,
+        fontWeight: 600,
+        borderRadius: 6,
+        border: "none",
+        cursor: "pointer",
+        background: tab === key ? "#3b82f6" : "#f3f4f6",
+        color: tab === key ? "#fff" : "#6b7280",
+        transition: "all 0.15s",
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div
+      ref={modalRef}
+      style={{
+        position: "fixed",
+        left,
+        top,
+        zIndex: 1000,
+        background: "#fff",
+        border: "1px solid #e5e7eb",
+        borderRadius: 12,
+        boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+        width: 272,
+        overflow: "hidden",
+      }}
+    >
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", padding: "10px 12px 8px", borderBottom: "1px solid #f3f4f6" }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#374151", flex: 1 }}>Adicionar etapa</span>
+        <button
+          onClick={onClose}
+          style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 18, lineHeight: 1, padding: "0 2px" }}
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 4, padding: "8px 10px", borderBottom: "1px solid #f3f4f6" }}>
+        {tabBtn("icons", "Ícones")}
+        {tabBtn("text", "Texto")}
+        {tabBtn("upload", "Upload")}
+      </div>
+
+      {/* Ícones */}
+      {tab === "icons" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, padding: 10, maxHeight: 260, overflowY: "auto" }}>
+          {NODE_DEFS.filter((d) => d.type !== "text").map((def) => (
+            <button
+              key={def.type}
+              onClick={() => onAdd(def.type)}
+              title={def.label}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                background: "none", border: "1px solid #f3f4f6", borderRadius: 8,
+                padding: "6px 4px", cursor: "pointer",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#f9fafb"; e.currentTarget.style.borderColor = "#e5e7eb"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "none"; e.currentTarget.style.borderColor = "#f3f4f6"; }}
+            >
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: def.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <def.Icon size={14} color="white" />
+              </div>
+              <span style={{ fontSize: 8.5, color: "#6b7280", textAlign: "center", lineHeight: 1.2, wordBreak: "break-word" }}>{def.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Texto */}
+      {tab === "text" && (
+        <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+          <input
+            autoFocus
+            value={textValue}
+            onChange={(e) => setTextValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && textValue.trim()) onAdd("text", { label: textValue.trim() }); }}
+            placeholder="Digite o texto..."
+            style={{
+              width: "100%", border: "1px solid #e5e7eb", borderRadius: 8,
+              padding: "8px 10px", fontSize: 13, outline: "none", boxSizing: "border-box",
+            }}
+          />
+          <button
+            onClick={() => { if (textValue.trim()) onAdd("text", { label: textValue.trim() }); }}
+            disabled={!textValue.trim()}
+            style={{
+              background: "#3b82f6", color: "#fff", border: "none", borderRadius: 8,
+              padding: "8px", fontSize: 12, fontWeight: 600,
+              cursor: textValue.trim() ? "pointer" : "not-allowed",
+              opacity: textValue.trim() ? 1 : 0.5,
+            }}
+          >
+            Adicionar texto
+          </button>
+        </div>
+      )}
+
+      {/* Upload */}
+      {tab === "upload" && (
+        <div style={{ padding: 12 }}>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              width: "100%", height: 90, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", gap: 6,
+              border: "2px dashed #e5e7eb", borderRadius: 10, background: "none",
+              cursor: "pointer", color: "#9ca3af", fontSize: 12, transition: "all 0.15s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#3b82f6"; e.currentTarget.style.color = "#3b82f6"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.color = "#9ca3af"; }}
+          >
+            <Upload size={22} />
+            <span>Enviar imagem / logo</span>
+            <span style={{ fontSize: 10, opacity: 0.7 }}>JPG, PNG, WebP — máx. 5 MB</span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            style={{ display: "none" }}
+            onChange={handleFileUpload}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Builder principal ────────────────────────────────────────────────────────
+
 function FunilBuilderInner() {
   const { funnelId } = useParams();
   const navigate = useNavigate();
@@ -92,9 +272,12 @@ function FunilBuilderInner() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
   const [loading, setLoading] = useState(true);
+  const [quickAdd, setQuickAdd] = useState(null);
 
   const reactFlowWrapper = useRef(null);
   const [rfInstance, setRfInstance] = useState(null);
+  const funnelNameRef = useRef(funnelName);
+  useEffect(() => { funnelNameRef.current = funnelName; }, [funnelName]);
 
   // nodeTypes deve ser estável (fora do render) — memo garante referência fixa
   const nodeTypes = useMemo(() => NODE_TYPES, []);
@@ -113,7 +296,7 @@ function FunilBuilderInner() {
       .finally(() => setLoading(false));
   }, [funnelId]);
 
-  // Salva funil
+  // Salva funil (com feedback visual)
   const handleSave = async () => {
     if (!rfInstance || !funnelId) return;
     setSaving(true);
@@ -123,7 +306,7 @@ function FunilBuilderInner() {
       await fetch(`${API}/api/funnels/${funnelId}`, {
         method: "PUT",
         headers: authHeaders(),
-        body: JSON.stringify({ name: funnelName, flow_data: flow }),
+        body: JSON.stringify({ name: funnelNameRef.current, flow_data: flow }),
       });
       setSaveMsg("Salvo!");
       setTimeout(() => setSaveMsg(""), 2000);
@@ -134,9 +317,24 @@ function FunilBuilderInner() {
     }
   };
 
-  // Conectar nós — edge curva azul com seta
+  // Salva silenciosamente (sem feedback — usado no auto-save)
+  const silentSave = useCallback(() => {
+    if (!rfInstance || !funnelId) return;
+    setTimeout(async () => {
+      try {
+        const flow = rfInstance.toObject();
+        await fetch(`${API}/api/funnels/${funnelId}`, {
+          method: "PUT",
+          headers: authHeaders(),
+          body: JSON.stringify({ name: funnelNameRef.current, flow_data: flow }),
+        });
+      } catch {}
+    }, 250);
+  }, [rfInstance, funnelId]);
+
+  // Conectar nós — edge bezier azul com seta + auto-save
   const onConnect = useCallback(
-    (params) =>
+    (params) => {
       setEdges((eds) =>
         addEdge(
           {
@@ -148,9 +346,59 @@ function FunilBuilderInner() {
           },
           eds
         )
-      ),
-    [setEdges]
+      );
+      silentSave();
+    },
+    [setEdges, silentSave]
   );
+
+  // Soltar seta no canvas vazio → abrir modal
+  const onConnectEnd = useCallback((event, connectionState) => {
+    if (!connectionState.isValid) {
+      setQuickAdd({
+        screenX: event.clientX,
+        screenY: event.clientY,
+        fromNode: connectionState.fromNode?.id ?? null,
+        fromHandle: connectionState.fromHandle?.id ?? null,
+      });
+    }
+  }, []);
+
+  // Adicionar nó via quick-add e conectar automaticamente
+  const handleQuickAdd = useCallback((type, extraData = {}) => {
+    if (!rfInstance || !quickAdd) return;
+    const bounds = reactFlowWrapper.current.getBoundingClientRect();
+    const pos = rfInstance.screenToFlowPosition({
+      x: quickAdd.screenX - bounds.left,
+      y: quickAdd.screenY - bounds.top,
+    });
+    const id = newId();
+    const newNode = {
+      id,
+      type,
+      position: pos,
+      data: { label: "", url: "", notes: "", imageB64: null, imageType: null, ...extraData },
+    };
+    setNodes((nds) => [...nds, newNode]);
+    if (quickAdd.fromNode) {
+      setEdges((eds) =>
+        addEdge(
+          {
+            source: quickAdd.fromNode,
+            sourceHandle: quickAdd.fromHandle,
+            target: id,
+            type: "default",
+            animated: true,
+            style: { stroke: "#3b82f6", strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#3b82f6" },
+          },
+          eds
+        )
+      );
+    }
+    setQuickAdd(null);
+    silentSave();
+  }, [rfInstance, quickAdd, setNodes, setEdges, silentSave]);
 
   // Drop no canvas
   const onDrop = useCallback(
@@ -255,6 +503,7 @@ function FunilBuilderInner() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onConnectEnd={onConnectEnd}
             onInit={setRfInstance}
             onDrop={onDrop}
             onDragOver={onDragOver}
@@ -281,6 +530,15 @@ function FunilBuilderInner() {
           />
         )}
       </div>
+
+      {/* Modal quick-add */}
+      {quickAdd && (
+        <QuickAddModal
+          position={{ x: quickAdd.screenX, y: quickAdd.screenY }}
+          onAdd={handleQuickAdd}
+          onClose={() => setQuickAdd(null)}
+        />
+      )}
     </div>
   );
 }

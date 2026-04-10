@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { FaFacebookF, FaInstagram, FaYoutube, FaWhatsapp, FaLinkedinIn, FaPhone, FaDesktop, FaShoppingCart, FaMousePointer, FaPencilAlt } from "react-icons/fa";
+import { FaFacebookF, FaInstagram, FaYoutube, FaWhatsapp, FaLinkedinIn, FaPhone, FaDesktop, FaShoppingCart, FaMousePointer, FaPencilAlt, FaFont } from "react-icons/fa";
 import { SiTiktok, SiGmail } from "react-icons/si";
 import { MdDynamicForm, MdWebhook } from "react-icons/md";
 
@@ -24,6 +24,7 @@ export const NODE_DEFS = [
   { type: "webhook",    label: "Webhook",      Icon: MdWebhook,       bg: "#f97316", category: "Funil" },
   { type: "purchase",   label: "Purchase",     Icon: FaShoppingCart,  bg: "#15803d", category: "Funil" },
   // Personalizado
+  { type: "text",       label: "Texto",        Icon: FaFont,          bg: "#374151", category: "Personalizado" },
   { type: "custom",     label: "Personalizado",Icon: FaPencilAlt,     bg: "#64748b", category: "Personalizado" },
 ];
 
@@ -233,10 +234,43 @@ function LandingPageNode({ data }) {
   );
 }
 
+// ─── Nó de texto simples ──────────────────────────────────────────────────────
+
+function TextNode({ data }) {
+  return (
+    <div style={{ position: "relative" }}>
+      <Handle type="source" position={Position.Top}    id="top"    style={{ ...handleStyle }} />
+      <Handle type="source" position={Position.Left}   id="left"   style={{ ...handleStyle, left: -5, top: "50%", transform: "translateY(-50%)" }} />
+      <Handle type="source" position={Position.Right}  id="right"  style={{ ...handleStyle, right: -5, top: "50%", transform: "translateY(-50%)" }} />
+      <div
+        style={{
+          background: "#fff",
+          border: "1.5px solid #d1d5db",
+          borderRadius: 8,
+          padding: "6px 14px",
+          fontSize: 13,
+          color: "#1f2937",
+          fontWeight: 500,
+          minWidth: 60,
+          maxWidth: 160,
+          textAlign: "center",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
+          wordBreak: "break-word",
+        }}
+      >
+        {data.label || "Texto"}
+      </div>
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ ...handleStyle }} />
+    </div>
+  );
+}
+
 // ─── Geração automática de nodeTypes ─────────────────────────────────────────
 
+const SPECIAL_TYPES = new Set(["landing", "text"]);
+
 const genericNodeTypes = Object.fromEntries(
-  NODE_DEFS.filter((d) => d.type !== "landing").map(({ type, label, Icon, bg }) => [
+  NODE_DEFS.filter((d) => !SPECIAL_TYPES.has(d.type)).map(({ type, label, Icon, bg }) => [
     type,
     function GeneratedNode({ data }) {
       return <CircleNode data={data} Icon={Icon} bg={bg} defaultLabel={label} />;
@@ -246,5 +280,6 @@ const genericNodeTypes = Object.fromEntries(
 
 export const nodeTypes = {
   landing: LandingPageNode,
+  text: TextNode,
   ...genericNodeTypes,
 };
