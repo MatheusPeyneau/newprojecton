@@ -258,6 +258,26 @@ class FunnelUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=255)
     flow_data: Optional[dict] = None
 
+class RecurringExpenseCreate(BaseModel):
+    name: str = Field(..., max_length=255)
+    value: float
+    frequency: str = "mensal"  # mensal | semanal | anual
+    due_day: Optional[int] = None
+    due_date: Optional[str] = None
+    category: str = Field(..., max_length=100)
+    description: Optional[str] = Field(None, max_length=1000)
+    show_in_dashboard: bool = True
+
+class RecurringExpenseUpdate(BaseModel):
+    name: Optional[str] = Field(None, max_length=255)
+    value: Optional[float] = None
+    frequency: Optional[str] = None
+    due_day: Optional[int] = None
+    due_date: Optional[str] = None
+    category: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = Field(None, max_length=1000)
+    show_in_dashboard: Optional[bool] = None
+
 class AIRequest(BaseModel):
     prompt: str
     context: Optional[Dict[str, Any]] = None
@@ -3401,6 +3421,46 @@ async def delete_funnel(funnel_id: str, current_user: dict = Depends(get_current
     result = await db.funnels.delete_one({"funnel_id": funnel_id, "org_id": current_user["org_id"]})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Funil não encontrado")
+
+
+# ─── Recurring Expenses ───────────────────────────────────────────────────────
+
+@api_router.post("/recurring-expenses", status_code=201)
+async def create_recurring_expense(body: RecurringExpenseCreate, current_user: dict = Depends(get_current_user)):
+    expense_id = f"expense_{uuid.uuid4().hex[:10]}"
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "expense_id": expense_id,
+        **body.model_dump(),
+        "org_id": current_user["org_id"],
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.recurring_expenses.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+@api_router.get("/recurring-expenses")
+async def list_recurring_expenses(current_user: dict = Depends(get_current_user)):
+    expenses = await db.recurring_expenses.find(
+        {"org_id": current_user["org_id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    return expenses
+
+@api_router.put("/recurring-expenses/{expense_id}")
+async def update_recurring_expense(expense_id: str, body: RecurringExpenseUpdate, current_user: dict = Depends(get_current_user)):
+    doc = await db.recurring_expenses.find_one({"expense_id": expense_id, "org_id": current_user["org_id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Gasto não encontrado")
+    update = {k: v for k, v in body.model_dump().items() if v is not None}
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.recurring_expenses.update_one({"expense_id": expense_id, "org_id": current_user["org_id"]}, {"$set": update})
+    return {**doc, **update}
+
+@api_router.delete("/recurring-expenses/{expense_id}", status_code=204)
+async def delete_recurring_expense(expense_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.recurring_expenses.delete_one({"expense_id": expense_id, "org_id": current_user["org_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Gasto não encontrado")
 
 
 @app.on_event("shutdown")

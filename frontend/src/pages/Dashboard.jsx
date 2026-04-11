@@ -10,7 +10,7 @@ import {
 import {
   AlertCircle, AlertTriangle, CheckCircle2, ChevronRight,
   DollarSign, TrendingUp, Target, Clock, ListTodo, FileWarning,
-  Users, Building2, RefreshCw, Bell, CalendarRange, X,
+  Users, Building2, RefreshCw, Bell, CalendarRange, X, CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -367,6 +367,7 @@ export default function Dashboard() {
   const [customRange, setCustomRange] = useState(null); // { start: "YYYY-MM-DD", end: "YYYY-MM-DD" }
   const [kpis, setKpis] = useState(null);
   const [mrrTrend, setMrrTrend] = useState([]);
+  const [recurringExpenses, setRecurringExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
   const prevAlerts = useRef({ stale: 0, proposals: 0, overdue: 0 });
@@ -383,9 +384,10 @@ export default function Dashboard() {
 
   const loadData = useCallback(async (p, isPolling = false, range = null) => {
     try {
-      const [kpisRes, trendRes] = await Promise.all([
+      const [kpisRes, trendRes, expensesRes] = await Promise.all([
         axios.get(buildKpisUrl(p, range ?? customRangeRef.current), { headers: getAuthHeader() }),
         axios.get(`${API}/dashboard/mrr-trend`, { headers: getAuthHeader() }),
+        axios.get(`${API}/recurring-expenses`, { headers: getAuthHeader() }).catch(() => ({ data: [] })),
       ]);
       const d = kpisRes.data;
 
@@ -410,6 +412,7 @@ export default function Dashboard() {
 
       setKpis(d);
       setMrrTrend(trendRes.data || []);
+      setRecurringExpenses(Array.isArray(expensesRes.data) ? expensesRes.data : []);
       setLastUpdated(new Date());
     } catch (err) {
       console.error("Dashboard error:", err);
@@ -541,6 +544,62 @@ export default function Dashboard() {
       <div className="mb-5">
         <MRRTrendChart data={mrrTrend} loading={false} />
       </div>
+
+      {/* ── SECTION 2.7: GASTOS RECORRENTES ── */}
+      {(() => {
+        const visibleExpenses = recurringExpenses.filter((e) => e.show_in_dashboard);
+        if (visibleExpenses.length === 0) return null;
+        const toMonthly = (v, f) => f === "semanal" ? v * 4.33 : f === "anual" ? v / 12 : v;
+        const total = visibleExpenses.reduce((s, e) => s + toMonthly(e.value, e.frequency), 0);
+        return (
+          <div className="mb-5 bg-red-50 dark:bg-red-950/20 border-2 border-red-200 dark:border-red-900/50 rounded-xl p-5" data-testid="recurring-expenses-card">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-md">
+                <CreditCard size={16} className="text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h2 className="text-sm font-heading font-semibold text-red-800 dark:text-red-300">Gastos Recorrentes</h2>
+                <p className="text-xs text-red-500 dark:text-red-500">{visibleExpenses.length} gasto{visibleExpenses.length !== 1 ? "s" : ""} ativo{visibleExpenses.length !== 1 ? "s" : ""} no dashboard</p>
+              </div>
+              <div className="ml-auto text-right">
+                <p className="text-xs text-red-500 dark:text-red-500 font-medium">Total mensal</p>
+                <p className="text-xl font-heading font-bold text-red-700 dark:text-red-400">
+                  {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(total)}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {visibleExpenses.map((e) => {
+                const monthly = (() => { const f = e.frequency; return f === "semanal" ? e.value * 4.33 : f === "anual" ? e.value / 12 : e.value; })();
+                return (
+                  <div key={e.expense_id} className="flex items-center justify-between py-2 border-b border-red-100 dark:border-red-900/30 last:border-0">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-red-800 dark:text-red-300 truncate">{e.name}</p>
+                      <p className="text-[10px] text-red-400 dark:text-red-500">{e.category} · {e.frequency}</p>
+                    </div>
+                    <div className="text-right shrink-0 ml-3">
+                      <p className="text-sm font-bold text-red-700 dark:text-red-400">
+                        {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(e.value)}
+                      </p>
+                      {e.frequency !== "mensal" && (
+                        <p className="text-[10px] text-red-400 dark:text-red-500">
+                          ≈ {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(monthly)}/mês
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => navigate("/financeiro")}
+              className="mt-3 text-xs text-red-600 dark:text-red-400 hover:underline flex items-center gap-1"
+            >
+              Gerenciar gastos <ChevronRight size={11} />
+            </button>
+          </div>
+        );
+      })()}
 
       {/* ── SECTION 3: PIPELINE FUNNEL + CONVERSION ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
