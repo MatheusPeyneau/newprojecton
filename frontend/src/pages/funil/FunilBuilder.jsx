@@ -307,6 +307,45 @@ function FunilBuilderInner() {
   const funnelNameRef = useRef(funnelName);
   useEffect(() => { funnelNameRef.current = funnelName; }, [funnelName]);
 
+  // Undo — histórico de snapshots
+  const history = useRef([]);
+  const historyIdx = useRef(-1);
+  const nodesRef = useRef([]);
+  const edgesRef = useRef([]);
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+  useEffect(() => { edgesRef.current = edges; }, [edges]);
+
+  const snapshot = useCallback(() => {
+    const snap = {
+      nodes: JSON.parse(JSON.stringify(nodesRef.current)),
+      edges: JSON.parse(JSON.stringify(edgesRef.current)),
+    };
+    history.current = history.current.slice(0, historyIdx.current + 1);
+    history.current.push(snap);
+    if (history.current.length > 50) history.current.shift();
+    historyIdx.current = history.current.length - 1;
+  }, []);
+
+  const undo = useCallback(() => {
+    if (historyIdx.current <= 0) return;
+    historyIdx.current--;
+    const { nodes: n, edges: e } = history.current[historyIdx.current];
+    setNodes(n);
+    setEdges(e);
+    setSelectedNode(null);
+  }, [setNodes, setEdges]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [undo]);
+
   // nodeTypes deve ser estável (fora do render) — memo garante referência fixa
   const nodeTypes = useMemo(() => NODE_TYPES, []);
 
@@ -319,6 +358,7 @@ function FunilBuilderInner() {
         if (data.name) setFunnelName(data.name);
         if (data.flow_data?.nodes) setNodes(data.flow_data.nodes);
         if (data.flow_data?.edges) setEdges(data.flow_data.edges);
+        setTimeout(snapshot, 0); // snapshot do estado inicial
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -375,9 +415,10 @@ function FunilBuilderInner() {
           eds
         )
       );
+      snapshot();
       silentSave();
     },
-    [setEdges, silentSave]
+    [setEdges, silentSave, snapshot]
   );
 
   // Soltar seta no canvas vazio → abrir modal
@@ -426,8 +467,9 @@ function FunilBuilderInner() {
       );
     }
     setQuickAdd(null);
+    snapshot();
     silentSave();
-  }, [rfInstance, quickAdd, setNodes, setEdges, silentSave]);
+  }, [rfInstance, quickAdd, setNodes, setEdges, silentSave, snapshot]);
 
   // Drop no canvas
   const onDrop = useCallback(
@@ -447,8 +489,9 @@ function FunilBuilderInner() {
         data: { label: "", url: "", notes: "", imageB64: null, imageType: null },
       };
       setNodes((nds) => [...nds, newNode]);
+      snapshot();
     },
-    [rfInstance, setNodes]
+    [rfInstance, setNodes, snapshot]
   );
 
   const onDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
@@ -474,10 +517,11 @@ function FunilBuilderInner() {
 
   // Excluir nó e suas arestas
   const deleteNode = useCallback((nodeId) => {
+    snapshot();
     setNodes((nds) => nds.filter((n) => n.id !== nodeId));
     setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
     setSelectedNode(null);
-  }, [setNodes, setEdges]);
+  }, [setNodes, setEdges, snapshot]);
 
   if (loading) {
     return (
@@ -538,9 +582,12 @@ function FunilBuilderInner() {
             onDragOver={onDragOver}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
+            onNodeDragStop={snapshot}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode="loose"
+            selectionOnDrag={true}
+            panOnDrag={[1, 2]}
             fitView
             deleteKeyCode="Delete"
           >
