@@ -18,7 +18,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import { ArrowLeft, Save, Loader2, Upload } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Upload, FileText, X } from "lucide-react";
 import { nodeTypes as NODE_TYPES, NODE_DEFS } from "./nodeTypes";
 import NodePalette from "./NodePalette";
 import NodeConfig from "./NodeConfig";
@@ -301,11 +301,17 @@ function FunilBuilderInner() {
   const [saveMsg, setSaveMsg] = useState("");
   const [loading, setLoading] = useState(true);
   const [quickAdd, setQuickAdd] = useState(null);
+  const [strategy, setStrategy] = useState("");
+  const [strategyOpen, setStrategyOpen] = useState(false);
+  const [customIcons, setCustomIcons] = useState([]);
+  const clipboardRef = useRef(null);
 
   const reactFlowWrapper = useRef(null);
   const [rfInstance, setRfInstance] = useState(null);
   const funnelNameRef = useRef(funnelName);
   useEffect(() => { funnelNameRef.current = funnelName; }, [funnelName]);
+  const strategyRef = useRef(strategy);
+  useEffect(() => { strategyRef.current = strategy; }, [strategy]);
 
   // Undo — histórico de snapshots
   const history = useRef([]);
@@ -337,25 +343,60 @@ function FunilBuilderInner() {
 
   useEffect(() => {
     const handler = (e) => {
+      const tag = e.target?.tagName;
+      const isTyping = tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable;
+
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         undo();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "c" && !isTyping) {
+        const selected = nodesRef.current.filter((n) => n.selected);
+        if (selected.length > 0) clipboardRef.current = selected.map((n) => JSON.parse(JSON.stringify(n)));
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "v" && !isTyping) {
+        if (!clipboardRef.current?.length) return;
+        e.preventDefault();
+        const idMap = {};
+        const newNodes = clipboardRef.current.map((n) => {
+          const id = newId();
+          idMap[n.id] = id;
+          return { ...n, id, position: { x: n.position.x + 30, y: n.position.y + 30 }, selected: true, data: { ...n.data } };
+        });
+        const copiedIds = new Set(clipboardRef.current.map((n) => n.id));
+        const newEdges = edgesRef.current
+          .filter((ed) => copiedIds.has(ed.source) && copiedIds.has(ed.target))
+          .map((ed) => ({ ...ed, id: `edge_${Date.now()}_${Math.random()}`, source: idMap[ed.source], target: idMap[ed.target] }));
+        setNodes((nds) => [...nds.map((n) => ({ ...n, selected: false })), ...newNodes]);
+        setEdges((eds) => [...eds, ...newEdges]);
+        snapshot();
+        return;
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [undo]);
+  }, [undo, snapshot, setNodes, setEdges]);
 
   // nodeTypes deve ser estável (fora do render) — memo garante referência fixa
   const nodeTypes = useMemo(() => NODE_TYPES, []);
 
-  // Carrega funil da API
+  // Carrega funil da API + ícones customizados
+  useEffect(() => {
+    fetch(`${API}/api/custom-icons`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((data) => setCustomIcons(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (!funnelId) { setLoading(false); return; }
     fetch(`${API}/api/funnels/${funnelId}`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((data) => {
         if (data.name) setFunnelName(data.name);
+        if (data.strategy) setStrategy(data.strategy);
         if (data.flow_data?.nodes) setNodes(data.flow_data.nodes);
         if (data.flow_data?.edges) setEdges(data.flow_data.edges);
         setTimeout(snapshot, 0); // snapshot do estado inicial
@@ -374,7 +415,7 @@ function FunilBuilderInner() {
       await fetch(`${API}/api/funnels/${funnelId}`, {
         method: "PUT",
         headers: authHeaders(),
-        body: JSON.stringify({ name: funnelNameRef.current, flow_data: flow }),
+        body: JSON.stringify({ name: funnelNameRef.current, flow_data: flow, strategy }),
       });
       setSaveMsg("Salvo!");
       setTimeout(() => setSaveMsg(""), 2000);
@@ -394,7 +435,7 @@ function FunilBuilderInner() {
         await fetch(`${API}/api/funnels/${funnelId}`, {
           method: "PUT",
           headers: authHeaders(),
-          body: JSON.stringify({ name: funnelNameRef.current, flow_data: flow }),
+          body: JSON.stringify({ name: funnelNameRef.current, flow_data: flow, strategy: strategyRef.current }),
         });
       } catch {}
     }, 250);
@@ -471,6 +512,22 @@ function FunilBuilderInner() {
     silentSave();
   }, [rfInstance, quickAdd, setNodes, setEdges, silentSave, snapshot]);
 
+  // Custom icons — salvar e remover
+  const saveCustomIcon = useCallback(async (name, imageB64, imageType, bgColor) => {
+    const r = await fetch(`${API}/api/custom-icons`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ name, image_b64: imageB64, image_type: imageType, bg_color: bgColor }),
+    });
+    const data = await r.json();
+    setCustomIcons((prev) => [data, ...prev]);
+  }, []);
+
+  const deleteCustomIcon = useCallback(async (iconId) => {
+    await fetch(`${API}/api/custom-icons/${iconId}`, { method: "DELETE", headers: authHeaders() });
+    setCustomIcons((prev) => prev.filter((ic) => ic.icon_id !== iconId));
+  }, []);
+
   // Drop no canvas
   const onDrop = useCallback(
     (e) => {
@@ -482,11 +539,14 @@ function FunilBuilderInner() {
         x: e.clientX - bounds.left,
         y: e.clientY - bounds.top,
       });
+      let extraData = {};
+      const iconRaw = e.dataTransfer.getData("application/reactflow-icon");
+      if (iconRaw) { try { extraData = JSON.parse(iconRaw); } catch {} }
       const newNode = {
         id: newId(),
         type,
         position: pos,
-        data: { label: "", url: "", notes: "", imageB64: null, imageType: null },
+        data: { label: "", url: "", notes: "", imageB64: null, imageType: null, ...extraData },
       };
       setNodes((nds) => [...nds, newNode]);
       snapshot();
@@ -555,6 +615,13 @@ function FunilBuilderInner() {
             </span>
           )}
           <button
+            onClick={() => setStrategyOpen((v) => !v)}
+            title="Descrição da estratégia"
+            className={`p-1.5 rounded transition-colors ${strategyOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+          >
+            <FileText size={16} />
+          </button>
+          <button
             onClick={handleSave}
             disabled={saving}
             className="flex items-center gap-1.5 text-sm bg-primary text-primary-foreground hover:bg-primary/90 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60"
@@ -567,7 +634,7 @@ function FunilBuilderInner() {
 
       {/* Body: palette + canvas + config */}
       <div className="flex flex-1 overflow-hidden">
-        <NodePalette />
+        <NodePalette customIcons={customIcons} saveCustomIcon={saveCustomIcon} deleteCustomIcon={deleteCustomIcon} />
 
         <div className="flex-1 relative" ref={reactFlowWrapper}>
           <ReactFlow
@@ -604,6 +671,35 @@ function FunilBuilderInner() {
             onClose={() => setSelectedNode(null)}
             onDelete={deleteNode}
           />
+        )}
+
+        {strategyOpen && (
+          <div className="w-72 shrink-0 border-l border-border bg-card flex flex-col">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+              <FileText size={14} className="text-muted-foreground" />
+              <span className="text-sm font-semibold flex-1">Descrição da Estratégia</span>
+              <button
+                onClick={() => { setStrategyOpen(false); silentSave(); }}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <textarea
+              value={strategy}
+              onChange={(e) => setStrategy(e.target.value)}
+              placeholder="Descreva o passo a passo da estratégia deste funil..."
+              className="flex-1 resize-none p-4 text-sm bg-transparent focus:outline-none"
+            />
+            <div className="px-4 py-3 border-t border-border">
+              <button
+                onClick={() => { setStrategyOpen(false); silentSave(); }}
+                className="w-full text-sm bg-primary text-primary-foreground hover:bg-primary/90 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                Salvar e fechar
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
