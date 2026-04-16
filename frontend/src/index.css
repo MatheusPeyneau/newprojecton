@@ -4,6 +4,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* TipTap rich text rendering inside Tailwind preflight */
+.tiptap strong { font-weight: 700; }
+.tiptap em { font-style: italic; }
+.tiptap u { text-decoration: underline; }
+.tiptap s { text-decoration: line-through; }
+.tiptap p { margin: 0; }
+.tiptap p + p { margin-top: 4px; }
+.tiptap:focus { outline: none; }
+.tiptap .is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #adb5bd;
+  pointer-events: none;
+  height: 0;
+}
+
 @layer base {
   :root {
     --background: 210 40% 98%;
