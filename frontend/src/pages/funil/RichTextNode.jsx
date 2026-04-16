@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Handle, Position, NodeResizer, useReactFlow } from "@xyflow/react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -9,7 +9,7 @@ import { Color } from "@tiptap/extension-color";
 import TextAlign from "@tiptap/extension-text-align";
 import { AlignLeft, AlignCenter, AlignRight } from "lucide-react";
 
-// ─── FontSize custom extension (via TextStyle) ────────────────────────────────
+// ─── FontSize via TextStyle ───────────────────────────────────────────────────
 
 const FontSize = TextStyle.extend({
   name: "textStyle",
@@ -38,45 +38,66 @@ const FontSize = TextStyle.extend({
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const FONTS = [
-  { label: "Inter",        value: "Inter, sans-serif" },
-  { label: "Arial",        value: "Arial, sans-serif" },
-  { label: "Georgia",      value: "Georgia, serif" },
-  { label: "Courier",      value: "'Courier New', monospace" },
-  { label: "Impact",       value: "Impact, fantasy" },
-  { label: "Trebuchet",    value: "'Trebuchet MS', sans-serif" },
+  { label: "Inter",     value: "Inter, sans-serif" },
+  { label: "Arial",     value: "Arial, sans-serif" },
+  { label: "Georgia",   value: "Georgia, serif" },
+  { label: "Courier",   value: "'Courier New', monospace" },
+  { label: "Impact",    value: "Impact, fantasy" },
+  { label: "Trebuchet", value: "'Trebuchet MS', sans-serif" },
+  { label: "Verdana",   value: "Verdana, sans-serif" },
 ];
 
-const SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64];
+const SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64, 96];
 
-const COLORS = [
-  "#000000", "#374151", "#6b7280", "#ffffff",
-  "#ef4444", "#f97316", "#eab308", "#22c55e",
-  "#3b82f6", "#8b5cf6", "#ec4899", "#06b6d4",
+// 5 colunas × 8 linhas = 40 cores
+const PALETTE = [
+  // Neutros
+  "#000000", "#434343", "#666666", "#999999", "#ffffff",
+  // Tons escuros
+  "#1a1a2e", "#16213e", "#0f3460", "#533483", "#2b2d42",
+  // Vermelhos / Rosas
+  "#ef4444", "#dc2626", "#be123c", "#e91e63", "#ff69b4",
+  // Laranjas / Amarelos
+  "#f97316", "#ea580c", "#fbbf24", "#fcd34d", "#fef08a",
+  // Verdes
+  "#22c55e", "#16a34a", "#15803d", "#86efac", "#bbf7d0",
+  // Azuis
+  "#3b82f6", "#2563eb", "#1d4ed8", "#60a5fa", "#bfdbfe",
+  // Roxos / Índigos
+  "#8b5cf6", "#7c3aed", "#6d28d9", "#a78bfa", "#ddd6fe",
+  // Cyans / Teals
+  "#06b6d4", "#0891b2", "#0e7490", "#67e8f9", "#cffafe",
 ];
 
 const handleStyle = { background: "#94a3b8", width: 10, height: 10, border: "2px solid #fff" };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Divider() {
-  return <div style={{ width: 1, height: 20, background: "#e5e7eb", margin: "0 3px", flexShrink: 0 }} />;
+function Sep() {
+  return (
+    <div style={{ width: 1, height: 22, background: "#e5e7eb", margin: "0 4px", flexShrink: 0 }} />
+  );
 }
 
-function Btn({ active, onClick, children, title, extraStyle = {} }) {
+function Btn({ active, onMouseDown, children, title, extraStyle = {} }) {
+  const [hov, setHov] = useState(false);
   return (
     <button
       title={title}
-      onMouseDown={(e) => { e.preventDefault(); onClick(); }}
+      onMouseDown={onMouseDown}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
       style={{
-        minWidth: 26, height: 26,
-        borderRadius: 5,
+        minWidth: 28, height: 28,
+        borderRadius: 6,
         border: "none",
         cursor: "pointer",
         display: "flex", alignItems: "center", justifyContent: "center",
-        background: active ? "#eff6ff" : "none",
-        color: active ? "#3b82f6" : "#374151",
-        fontSize: 12, fontWeight: 700,
+        background: active ? "#eff6ff" : hov ? "#f3f4f6" : "transparent",
+        color: active ? "#2563eb" : "#374151",
+        fontSize: 13, fontWeight: 700,
         flexShrink: 0,
+        transition: "background 0.1s",
         ...extraStyle,
       }}
     >
@@ -85,10 +106,94 @@ function Btn({ active, onClick, children, title, extraStyle = {} }) {
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+function StyledSelect({ value, onChange, options, width = 90 }) {
+  return (
+    <select
+      value={value}
+      onMouseDown={(e) => e.stopPropagation()}
+      onChange={onChange}
+      style={{
+        fontSize: 12, border: "1px solid #d1d5db", borderRadius: 6,
+        padding: "3px 6px", cursor: "pointer", width, height: 28,
+        background: "#fff", color: "#374151", outline: "none",
+        appearance: "auto",
+      }}
+    >
+      {options}
+    </select>
+  );
+}
+
+// ─── Color Picker Panel ───────────────────────────────────────────────────────
+
+function ColorPanel({ editor, onClose }) {
+  const panelRef = useRef(null);
+
+  useEffect(() => {
+    const onDown = (e) => {
+      if (panelRef.current && !panelRef.current.contains(e.target)) onClose();
+    };
+    const t = setTimeout(() => document.addEventListener("mousedown", onDown), 50);
+    return () => { clearTimeout(t); document.removeEventListener("mousedown", onDown); };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={panelRef}
+      style={{
+        position: "absolute",
+        top: "calc(100% + 6px)",
+        right: 0,
+        zIndex: 1100,
+        background: "#fff",
+        border: "1px solid #e5e7eb",
+        borderRadius: 12,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.16)",
+        padding: 12,
+        minWidth: 156,
+      }}
+    >
+      <p style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+        Cores
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5 }}>
+        {PALETTE.map((color) => {
+          const active = editor.isActive("textStyle", { color });
+          return (
+            <button
+              key={color}
+              title={color}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                editor.chain().focus().setColor(color).run();
+                onClose();
+              }}
+              style={{
+                width: 22, height: 22, borderRadius: 5,
+                background: color,
+                border: color === "#ffffff"
+                  ? "1px solid #d1d5db"
+                  : active
+                  ? "2.5px solid #2563eb"
+                  : "2px solid transparent",
+                cursor: "pointer",
+                transition: "transform 0.1s",
+                transform: active ? "scale(1.15)" : "scale(1)",
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function RichTextNode({ data, selected, id }) {
   const [editing, setEditing] = useState(false);
+  const [showColors, setShowColors] = useState(false);
   const containerRef = useRef(null);
   const { setNodes } = useReactFlow();
 
@@ -113,29 +218,27 @@ export default function RichTextNode({ data, selected, id }) {
     },
   });
 
-  // Sync editable flag
   useEffect(() => {
     if (!editor) return;
     editor.setEditable(editing);
     if (editing) setTimeout(() => editor.commands.focus("end"), 0);
   }, [editing, editor]);
 
-  // Click outside → exit edit
   useEffect(() => {
     if (!editing) return;
     const onDown = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
         setEditing(false);
+        setShowColors(false);
       }
     };
     const t = setTimeout(() => document.addEventListener("mousedown", onDown), 50);
     return () => { clearTimeout(t); document.removeEventListener("mousedown", onDown); };
   }, [editing]);
 
-  // Escape → exit edit
   useEffect(() => {
     if (!editing) return;
-    const onKey = (e) => { if (e.key === "Escape") setEditing(false); };
+    const onKey = (e) => { if (e.key === "Escape") { setEditing(false); setShowColors(false); } };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [editing]);
@@ -144,6 +247,7 @@ export default function RichTextNode({ data, selected, id }) {
 
   const fontSize = editor.getAttributes("textStyle")?.fontSize || "16";
   const fontFamily = editor.getAttributes("textStyle")?.fontFamily || FONTS[0].value;
+  const currentColor = editor.getAttributes("textStyle")?.color || "#000000";
 
   return (
     <div ref={containerRef} style={{ position: "relative", minWidth: 120 }}>
@@ -159,7 +263,7 @@ export default function RichTextNode({ data, selected, id }) {
       <Handle type="source" position={Position.Left}   id="left"   style={{ ...handleStyle, left: -5, top: "50%", transform: "translateY(-50%)" }} />
       <Handle type="source" position={Position.Right}  id="right"  style={{ ...handleStyle, right: -5, top: "50%", transform: "translateY(-50%)" }} />
 
-      {/* ── Floating toolbar ─────────────────────────────────────────────── */}
+      {/* ── Toolbar ─────────────────────────────────────────────────────── */}
       {editing && (
         <div
           onMouseDown={(e) => e.stopPropagation()}
@@ -175,81 +279,97 @@ export default function RichTextNode({ data, selected, id }) {
             background: "#fff",
             border: "1px solid #e5e7eb",
             borderRadius: 10,
-            boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
-            padding: "4px 6px",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.14)",
+            padding: "4px 8px",
             whiteSpace: "nowrap",
             userSelect: "none",
           }}
         >
           {/* Font family */}
-          <select
+          <StyledSelect
             value={fontFamily}
-            onMouseDown={(e) => e.stopPropagation()}
             onChange={(e) => editor.chain().focus().setFontFamily(e.target.value).run()}
-            style={{
-              fontSize: 11, border: "1px solid #e5e7eb", borderRadius: 5,
-              padding: "2px 4px", cursor: "pointer", maxWidth: 88, height: 26,
-              background: "#fafafa", color: "#374151",
-            }}
-          >
-            {FONTS.map((f) => (
-              <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>
-                {f.label}
-              </option>
+            width={102}
+            options={FONTS.map((f) => (
+              <option key={f.value} value={f.value}>{f.label}</option>
             ))}
-          </select>
+          />
 
           {/* Font size */}
-          <select
+          <StyledSelect
             value={fontSize}
-            onMouseDown={(e) => e.stopPropagation()}
             onChange={(e) => editor.chain().focus().setFontSize(e.target.value).run()}
-            style={{
-              fontSize: 11, border: "1px solid #e5e7eb", borderRadius: 5,
-              padding: "2px 2px", cursor: "pointer", width: 46, height: 26,
-              background: "#fafafa", color: "#374151",
-            }}
-          >
-            {SIZES.map((s) => <option key={s} value={String(s)}>{s}</option>)}
-          </select>
+            width={56}
+            options={SIZES.map((s) => (
+              <option key={s} value={String(s)}>{s}</option>
+            ))}
+          />
 
-          <Divider />
+          <Sep />
 
           {/* Bold */}
-          <Btn active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()} title="Negrito (Ctrl+B)" extraStyle={{ fontWeight: 900 }}>B</Btn>
-          {/* Italic */}
-          <Btn active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()} title="Itálico (Ctrl+I)" extraStyle={{ fontStyle: "italic" }}>I</Btn>
-          {/* Underline */}
-          <Btn active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()} title="Sublinhado (Ctrl+U)" extraStyle={{ textDecoration: "underline" }}>U</Btn>
-          {/* Strike */}
-          <Btn active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()} title="Riscado" extraStyle={{ textDecoration: "line-through", fontWeight: 400 }}>S</Btn>
+          <Btn
+            active={editor.isActive("bold")}
+            onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleBold().run(); }}
+            title="Negrito (Ctrl+B)"
+            extraStyle={{ fontWeight: 900, fontSize: 14 }}
+          >B</Btn>
 
-          <Divider />
+          {/* Italic */}
+          <Btn
+            active={editor.isActive("italic")}
+            onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleItalic().run(); }}
+            title="Itálico (Ctrl+I)"
+            extraStyle={{ fontStyle: "italic" }}
+          >I</Btn>
+
+          {/* Underline */}
+          <Btn
+            active={editor.isActive("underline")}
+            onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleUnderline().run(); }}
+            title="Sublinhado (Ctrl+U)"
+            extraStyle={{ textDecoration: "underline" }}
+          >U</Btn>
+
+          {/* Strikethrough */}
+          <Btn
+            active={editor.isActive("strike")}
+            onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleStrike().run(); }}
+            title="Riscado"
+            extraStyle={{ textDecoration: "line-through", fontWeight: 400 }}
+          >S</Btn>
+
+          <Sep />
 
           {/* Alignment */}
-          <Btn active={editor.isActive({ textAlign: "left" })}   onClick={() => editor.chain().focus().setTextAlign("left").run()}   title="Alinhar à esquerda"><AlignLeft size={13} /></Btn>
-          <Btn active={editor.isActive({ textAlign: "center" })} onClick={() => editor.chain().focus().setTextAlign("center").run()} title="Centralizar"><AlignCenter size={13} /></Btn>
-          <Btn active={editor.isActive({ textAlign: "right" })}  onClick={() => editor.chain().focus().setTextAlign("right").run()}  title="Alinhar à direita"><AlignRight size={13} /></Btn>
+          <Btn active={editor.isActive({ textAlign: "left" })}   onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().setTextAlign("left").run(); }}   title="Alinhar à esquerda"><AlignLeft size={14} /></Btn>
+          <Btn active={editor.isActive({ textAlign: "center" })} onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().setTextAlign("center").run(); }} title="Centralizar"><AlignCenter size={14} /></Btn>
+          <Btn active={editor.isActive({ textAlign: "right" })}  onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().setTextAlign("right").run(); }}  title="Alinhar à direita"><AlignRight size={14} /></Btn>
 
-          <Divider />
+          <Sep />
 
-          {/* Color swatches */}
-          <div style={{ display: "flex", gap: 3, alignItems: "center", flexWrap: "wrap", maxWidth: 80 }}>
-            {COLORS.map((color) => {
-              const isActive = editor.isActive("textStyle", { color });
-              return (
-                <button
-                  key={color}
-                  title={color}
-                  onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().setColor(color).run(); }}
-                  style={{
-                    width: 14, height: 14, borderRadius: "50%", background: color, flexShrink: 0,
-                    border: color === "#ffffff" ? "1px solid #d1d5db" : isActive ? "2px solid #374151" : "2px solid transparent",
-                    cursor: "pointer", transition: "transform 0.1s",
-                  }}
-                />
-              );
-            })}
+          {/* Color button */}
+          <div style={{ position: "relative" }}>
+            <button
+              title="Cor do texto"
+              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setShowColors((v) => !v); }}
+              style={{
+                width: 28, height: 28, borderRadius: 6, border: "1px solid #e5e7eb",
+                cursor: "pointer", display: "flex", flexDirection: "column",
+                alignItems: "center", justifyContent: "center", gap: 1,
+                background: showColors ? "#f3f4f6" : "#fff", padding: 0,
+              }}
+            >
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#374151", lineHeight: 1 }}>A</span>
+              <span style={{ width: 16, height: 3, borderRadius: 2, background: currentColor, display: "block" }} />
+            </button>
+
+            {showColors && (
+              <ColorPanel
+                editor={editor}
+                onClose={() => setShowColors(false)}
+              />
+            )}
           </div>
         </div>
       )}
@@ -262,15 +382,16 @@ export default function RichTextNode({ data, selected, id }) {
           cursor: editing ? "text" : "default",
           minWidth: 120,
           padding: "6px 10px",
-          outline: editing ? "2px solid #3b82f6" : selected ? "1.5px dashed #94a3b8" : "none",
+          outline: editing
+            ? "2px solid #3b82f6"
+            : selected
+            ? "1.5px dashed #94a3b8"
+            : "none",
           borderRadius: 6,
           outlineOffset: 2,
         }}
       >
-        <EditorContent
-          editor={editor}
-          style={{ outline: "none" }}
-        />
+        <EditorContent editor={editor} style={{ outline: "none" }} />
       </div>
     </div>
   );
