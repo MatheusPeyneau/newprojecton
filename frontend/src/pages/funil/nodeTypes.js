@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Handle, Position } from "@xyflow/react";
+import { Handle, Position, NodeResizer } from "@xyflow/react";
 import { FaFacebookF, FaInstagram, FaYoutube, FaWhatsapp, FaLinkedinIn, FaPhone, FaDesktop, FaShoppingCart, FaMousePointer, FaPencilAlt, FaFont } from "react-icons/fa";
 import { SiTiktok, SiGmail, SiGoogleads } from "react-icons/si";
 import { MdDynamicForm, MdWebhook } from "react-icons/md";
@@ -235,6 +235,42 @@ function LandingPageNode({ data }) {
   );
 }
 
+// ─── Nó de imagem redimensionável ────────────────────────────────────────────
+
+function ImageNode({ data, selected }) {
+  return (
+    <div style={{ width: "100%", height: "100%", position: "relative" }}>
+      <NodeResizer
+        isVisible={selected}
+        minWidth={60}
+        minHeight={40}
+        lineStyle={{ border: "2px solid #3b82f6" }}
+        handleStyle={{ width: 8, height: 8, borderRadius: 2, background: "#fff", border: "2px solid #3b82f6" }}
+      />
+      <Handle type="source" position={Position.Top}    id="top"    style={{ ...handleStyle }} />
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ ...handleStyle }} />
+      <Handle type="source" position={Position.Left}   id="left"   style={{ ...handleStyle, left: -5, top: "50%", transform: "translateY(-50%)" }} />
+      <Handle type="source" position={Position.Right}  id="right"  style={{ ...handleStyle, right: -5, top: "50%", transform: "translateY(-50%)" }} />
+      {data.imageB64 ? (
+        <img
+          src={`data:${data.imageType || "image/png"};base64,${data.imageB64}`}
+          alt={data.label || "imagem"}
+          style={{ width: "100%", height: "100%", objectFit: "fill", display: "block", borderRadius: 4, pointerEvents: "none" }}
+          draggable={false}
+        />
+      ) : (
+        <div style={{
+          width: "100%", height: "100%", display: "flex", alignItems: "center",
+          justifyContent: "center", background: "#f3f4f6", borderRadius: 4,
+          border: "2px dashed #d1d5db",
+        }}>
+          <span style={{ fontSize: 11, color: "#9ca3af" }}>Sem imagem</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Nó de texto simples ──────────────────────────────────────────────────────
 
 function TextNode({ data }) {
@@ -268,7 +304,7 @@ function TextNode({ data }) {
 
 // ─── Geração automática de nodeTypes ─────────────────────────────────────────
 
-const SPECIAL_TYPES = new Set(["landing", "text"]);
+const SPECIAL_TYPES = new Set(["landing", "text", "image"]);
 
 const genericNodeTypes = Object.fromEntries(
   NODE_DEFS.filter((d) => !SPECIAL_TYPES.has(d.type)).map(({ type, label, Icon, bg }) => [
@@ -282,5 +318,6 @@ const genericNodeTypes = Object.fromEntries(
 export const nodeTypes = {
   landing: LandingPageNode,
   text: TextNode,
+  image: ImageNode,
   ...genericNodeTypes,
 };

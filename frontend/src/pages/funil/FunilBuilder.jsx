@@ -18,7 +18,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import { ArrowLeft, Save, Loader2, Upload, FileText, X, MousePointer2, Hand } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Upload, FileText, X, MousePointer2, Hand, Image as ImageIcon } from "lucide-react";
 import { nodeTypes as NODE_TYPES, NODE_DEFS } from "./nodeTypes";
 import NodePalette from "./NodePalette";
 import NodeConfig from "./NodeConfig";
@@ -305,6 +305,7 @@ function FunilBuilderInner() {
   const [strategyOpen, setStrategyOpen] = useState(false);
   const [customIcons, setCustomIcons] = useState([]);
   const [tool, setTool] = useState("select"); // "select" | "pan"
+  const imageInputRef = useRef(null);
   const clipboardRef = useRef(null);
 
   const reactFlowWrapper = useRef(null);
@@ -380,6 +381,33 @@ function FunilBuilderInner() {
     return () => window.removeEventListener("keydown", handler);
   }, [undo, snapshot, setNodes, setEdges]);
 
+  // Insere ImageNode com tamanho real (máx 600px de largura)
+  const insertImageNode = useCallback((b64, imageType) => {
+    const img = new window.Image();
+    img.onload = () => {
+      const maxW = 600;
+      const w = Math.min(img.naturalWidth, maxW);
+      const h = Math.round(w * (img.naturalHeight / img.naturalWidth));
+      const bounds = reactFlowWrapper.current?.getBoundingClientRect();
+      const center = rfInstance?.screenToFlowPosition({
+        x: (bounds?.width ?? 600) / 2,
+        y: (bounds?.height ?? 400) / 2,
+      }) ?? { x: 0, y: 0 };
+      setNodes((nds) => [
+        ...nds,
+        {
+          id: newId(),
+          type: "image",
+          position: { x: center.x - w / 2, y: center.y - h / 2 },
+          style: { width: w, height: h },
+          data: { label: "", imageB64: b64, imageType },
+        },
+      ]);
+      snapshot();
+    };
+    img.src = `data:${imageType};base64,${b64}`;
+  }, [rfInstance, setNodes, snapshot]);
+
   // Colar imagem do clipboard (Ctrl+V com imagem)
   useEffect(() => {
     const handlePaste = (e) => {
@@ -395,22 +423,7 @@ function FunilBuilderInner() {
           const reader = new FileReader();
           reader.onload = (ev) => {
             const b64 = ev.target.result.split(",")[1];
-            const bounds = reactFlowWrapper.current?.getBoundingClientRect();
-            const center = rfInstance.screenToFlowPosition({
-              x: (bounds?.width ?? 600) / 2,
-              y: (bounds?.height ?? 400) / 2,
-            });
-            const id = newId();
-            setNodes((nds) => [
-              ...nds,
-              {
-                id,
-                type: "custom",
-                position: { x: center.x - 40, y: center.y - 40 },
-                data: { label: "", url: "", notes: "", imageB64: b64, imageType: file.type },
-              },
-            ]);
-            snapshot();
+            insertImageNode(b64, file.type);
           };
           reader.readAsDataURL(file);
           break;
@@ -419,7 +432,20 @@ function FunilBuilderInner() {
     };
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [rfInstance, setNodes, snapshot]);
+  }, [rfInstance, insertImageNode]);
+
+  // Upload de imagem via botão da toolbar
+  const handleImageFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const b64 = ev.target.result.split(",")[1];
+      insertImageNode(b64, file.type);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   // nodeTypes deve ser estável (fora do render) — memo garante referência fixa
   const nodeTypes = useMemo(() => NODE_TYPES, []);
@@ -719,6 +745,29 @@ function FunilBuilderInner() {
                 {icon}
               </button>
             ))}
+            {/* Separador */}
+            <div style={{ width: 1, height: 20, background: "#e5e7eb", margin: "0 2px" }} />
+            {/* Inserir imagem */}
+            <button
+              onClick={() => imageInputRef.current?.click()}
+              title="Inserir imagem do computador"
+              style={{
+                width: 32, height: 32, borderRadius: 8, border: "none",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                background: "none", color: "#6b7280", transition: "all 0.15s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#f3f4f6"; e.currentTarget.style.color = "#374151"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "#6b7280"; }}
+            >
+              <ImageIcon size={15} />
+            </button>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={handleImageFileSelect}
+            />
           </div>
 
           <ReactFlow
