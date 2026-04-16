@@ -191,7 +191,7 @@ function ColorPanel({ editor, onClose }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function RichTextNode({ data, selected, id }) {
+export default function RichTextNode({ data, selected, id, width, height }) {
   const [editing, setEditing] = useState(false);
   const [showColors, setShowColors] = useState(false);
   const containerRef = useRef(null);
@@ -249,8 +249,11 @@ export default function RichTextNode({ data, selected, id }) {
   const fontFamily = editor.getAttributes("textStyle")?.fontFamily || FONTS[0].value;
   const currentColor = editor.getAttributes("textStyle")?.color || "#000000";
 
+  const w = width  || 160;
+  const h = height || undefined;
+
   return (
-    <div ref={containerRef} style={{ position: "relative", minWidth: 120 }}>
+    <div ref={containerRef} style={{ position: "relative", width: w, height: h, minHeight: 40 }}>
       <NodeResizer
         isVisible={selected && !editing}
         minWidth={80}
@@ -380,8 +383,11 @@ export default function RichTextNode({ data, selected, id }) {
         onKeyDown={(e) => editing && e.stopPropagation()}
         style={{
           cursor: editing ? "text" : "default",
-          minWidth: 120,
+          width: "100%",
+          height: h ? "100%" : "auto",
+          minHeight: 40,
           padding: "6px 10px",
+          boxSizing: "border-box",
           outline: editing
             ? "2px solid #3b82f6"
             : selected
@@ -389,9 +395,13 @@ export default function RichTextNode({ data, selected, id }) {
             : "none",
           borderRadius: 6,
           outlineOffset: 2,
+          overflow: "hidden",
         }}
       >
-        <EditorContent editor={editor} style={{ outline: "none" }} />
+        <EditorContent
+          editor={editor}
+          style={{ outline: "none", height: h ? "100%" : "auto" }}
+        />
       </div>
     </div>
   );
