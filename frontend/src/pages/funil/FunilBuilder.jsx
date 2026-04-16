@@ -18,7 +18,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import { ArrowLeft, Save, Loader2, Upload, FileText, X } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Upload, FileText, X, MousePointer2, Hand } from "lucide-react";
 import { nodeTypes as NODE_TYPES, NODE_DEFS } from "./nodeTypes";
 import NodePalette from "./NodePalette";
 import NodeConfig from "./NodeConfig";
@@ -304,6 +304,7 @@ function FunilBuilderInner() {
   const [strategy, setStrategy] = useState("");
   const [strategyOpen, setStrategyOpen] = useState(false);
   const [customIcons, setCustomIcons] = useState([]);
+  const [tool, setTool] = useState("select"); // "select" | "pan"
   const clipboardRef = useRef(null);
 
   const reactFlowWrapper = useRef(null);
@@ -378,6 +379,47 @@ function FunilBuilderInner() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [undo, snapshot, setNodes, setEdges]);
+
+  // Colar imagem do clipboard (Ctrl+V com imagem)
+  useEffect(() => {
+    const handlePaste = (e) => {
+      const tag = e.target?.tagName;
+      const isTyping = tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable;
+      if (isTyping) return;
+      const items = e.clipboardData?.items;
+      if (!items || !rfInstance) return;
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (!file) break;
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const b64 = ev.target.result.split(",")[1];
+            const bounds = reactFlowWrapper.current?.getBoundingClientRect();
+            const center = rfInstance.screenToFlowPosition({
+              x: (bounds?.width ?? 600) / 2,
+              y: (bounds?.height ?? 400) / 2,
+            });
+            const id = newId();
+            setNodes((nds) => [
+              ...nds,
+              {
+                id,
+                type: "custom",
+                position: { x: center.x - 40, y: center.y - 40 },
+                data: { label: "", url: "", notes: "", imageB64: b64, imageType: file.type },
+              },
+            ]);
+            snapshot();
+          };
+          reader.readAsDataURL(file);
+          break;
+        }
+      }
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [rfInstance, setNodes, snapshot]);
 
   // nodeTypes deve ser estável (fora do render) — memo garante referência fixa
   const nodeTypes = useMemo(() => NODE_TYPES, []);
@@ -637,6 +679,48 @@ function FunilBuilderInner() {
         <NodePalette customIcons={customIcons} saveCustomIcon={saveCustomIcon} deleteCustomIcon={deleteCustomIcon} />
 
         <div className="flex-1 relative" ref={reactFlowWrapper}>
+          {/* Toolbar flutuante estilo Miro */}
+          <div
+            style={{
+              position: "absolute",
+              top: 12,
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 10,
+              display: "flex",
+              alignItems: "center",
+              background: "#fff",
+              borderRadius: 12,
+              boxShadow: "0 2px 16px rgba(0,0,0,0.13)",
+              border: "1px solid #e5e7eb",
+              padding: "4px 6px",
+              gap: 2,
+            }}
+          >
+            {[
+              { key: "select", icon: <MousePointer2 size={15} />, title: "Selecionar (V)" },
+              { key: "pan",    icon: <Hand size={15} />,           title: "Mover canvas (H)" },
+            ].map(({ key, icon, title }) => (
+              <button
+                key={key}
+                onClick={() => setTool(key)}
+                title={title}
+                style={{
+                  width: 32, height: 32,
+                  borderRadius: 8,
+                  border: "none",
+                  cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: tool === key ? "#eff6ff" : "none",
+                  color: tool === key ? "#3b82f6" : "#6b7280",
+                  transition: "all 0.15s",
+                }}
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
+
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -653,12 +737,12 @@ function FunilBuilderInner() {
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode="loose"
-            selectionOnDrag={true}
-            panOnDrag={[1, 2]}
+            selectionOnDrag={tool === "select"}
+            panOnDrag={tool === "pan" ? true : [1, 2]}
             fitView
             deleteKeyCode="Delete"
           >
-            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d1d5db" />
+            <Background variant={BackgroundVariant.Lines} gap={24} lineWidth={1} color="#e5e7eb" />
             <Controls />
             <MiniMap nodeStrokeWidth={3} zoomable pannable />
           </ReactFlow>

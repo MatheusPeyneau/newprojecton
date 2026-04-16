@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { FaFacebookF, FaInstagram, FaYoutube, FaWhatsapp, FaLinkedinIn, FaPhone, FaDesktop, FaShoppingCart, FaMousePointer, FaPencilAlt, FaFont } from "react-icons/fa";
-import { SiTiktok, SiGmail } from "react-icons/si";
+import { SiTiktok, SiGmail, SiGoogleads } from "react-icons/si";
 import { MdDynamicForm, MdWebhook } from "react-icons/md";
 
 // ─── Definições da paleta ─────────────────────────────────────────────────────
@@ -13,6 +13,7 @@ export const NODE_DEFS = [
   { type: "instagram",  label: "Instagram",    Icon: FaInstagram,     bg: "#e1306c", category: "Tráfego" },
   { type: "youtube",    label: "YouTube",      Icon: FaYoutube,       bg: "#ff0000", category: "Tráfego" },
   { type: "linkedin",   label: "LinkedIn",     Icon: FaLinkedinIn,    bg: "#0a66c2", category: "Tráfego" },
+  { type: "google",    label: "Google Ads",   Icon: SiGoogleads,     bg: "#4285f4", category: "Tráfego" },
   // Comunicação
   { type: "whatsapp",   label: "WhatsApp",     Icon: FaWhatsapp,      bg: "#25d366", category: "Comunicação" },
   { type: "gmail",      label: "Gmail",        Icon: SiGmail,         bg: "#ea4335", category: "Comunicação" },
