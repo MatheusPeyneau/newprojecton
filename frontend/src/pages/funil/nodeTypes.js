@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Handle, Position, NodeResizer } from "@xyflow/react";
 import RichTextNode from "./RichTextNode";
-import { FaFacebookF, FaInstagram, FaYoutube, FaWhatsapp, FaLinkedinIn, FaPhone, FaDesktop, FaShoppingCart, FaMousePointer, FaPencilAlt, FaFont } from "react-icons/fa";
+import { FaFacebookF, FaInstagram, FaYoutube, FaWhatsapp, FaLinkedinIn, FaPhone, FaDesktop, FaShoppingCart, FaMousePointer, FaPencilAlt, FaFont, FaCreditCard, FaArrowCircleUp, FaArrowCircleDown, FaHeart, FaPlayCircle, FaCalendarAlt, FaRobot, FaTag, FaLock, FaEnvelope, FaUserFriends } from "react-icons/fa";
 import { SiTiktok, SiGmail, SiGoogleads } from "react-icons/si";
-import { MdDynamicForm, MdWebhook } from "react-icons/md";
+import { MdDynamicForm, MdWebhook, MdSms } from "react-icons/md";
 
 // ─── Definições da paleta ─────────────────────────────────────────────────────
 
@@ -20,14 +20,27 @@ export const NODE_DEFS = [
   { type: "gmail",      label: "Gmail",        Icon: SiGmail,         bg: "#ea4335", category: "Comunicação" },
   { type: "telefone",   label: "Telefone",     Icon: FaPhone,         bg: "#16a34a", category: "Comunicação" },
   // Etapas do Funil
-  { type: "landing",    label: "Landing Page", Icon: FaDesktop,       bg: "#6366f1", category: "Funil" },
-  { type: "clique",     label: "Clique",       Icon: FaMousePointer,  bg: "#3b82f6", category: "Funil" },
-  { type: "forms",      label: "Forms",        Icon: MdDynamicForm,   bg: "#0891b2", category: "Funil" },
-  { type: "webhook",    label: "Webhook",      Icon: MdWebhook,       bg: "#f97316", category: "Funil" },
-  { type: "purchase",   label: "Purchase",     Icon: FaShoppingCart,  bg: "#15803d", category: "Funil" },
+  { type: "landing",      label: "Landing Page",   Icon: FaDesktop,         bg: "#6366f1", category: "Funil" },
+  { type: "vsl",          label: "VSL / Vídeo",    Icon: FaPlayCircle,      bg: "#7c3aed", category: "Funil" },
+  { type: "clique",       label: "Clique / CTA",   Icon: FaMousePointer,    bg: "#3b82f6", category: "Funil" },
+  { type: "forms",        label: "Formulário",     Icon: MdDynamicForm,     bg: "#0891b2", category: "Funil" },
+  { type: "oferta",       label: "Oferta",         Icon: FaTag,             bg: "#f59e0b", category: "Funil" },
+  { type: "checkout",     label: "Checkout",       Icon: FaCreditCard,      bg: "#15803d", category: "Funil" },
+  { type: "purchase",     label: "Compra",         Icon: FaShoppingCart,    bg: "#166534", category: "Funil" },
+  { type: "upsell",       label: "Upsell",         Icon: FaArrowCircleUp,   bg: "#059669", category: "Funil" },
+  { type: "downsell",     label: "Downsell",       Icon: FaArrowCircleDown, bg: "#7c3aed", category: "Funil" },
+  { type: "obrigado",     label: "Pg. Obrigado",   Icon: FaHeart,           bg: "#e11d48", category: "Funil" },
+  { type: "membros",      label: "Área de Membros",Icon: FaLock,            bg: "#4f46e5", category: "Funil" },
+  { type: "agendamento",  label: "Agendamento",    Icon: FaCalendarAlt,     bg: "#0284c7", category: "Funil" },
+  { type: "chatbot",      label: "Chatbot",        Icon: FaRobot,           bg: "#374151", category: "Funil" },
+  { type: "comunidade",   label: "Comunidade",     Icon: FaUserFriends,     bg: "#9333ea", category: "Funil" },
+  { type: "webhook",      label: "Webhook",        Icon: MdWebhook,         bg: "#f97316", category: "Funil" },
+  // Comunicação extra
+  { type: "sms",          label: "SMS",            Icon: MdSms,             bg: "#16a34a", category: "Comunicação" },
+  { type: "newsletter",   label: "Newsletter",     Icon: FaEnvelope,        bg: "#ea4335", category: "Comunicação" },
   // Personalizado
-  { type: "text",       label: "Texto",        Icon: FaFont,          bg: "#374151", category: "Personalizado" },
-  { type: "custom",     label: "Personalizado",Icon: FaPencilAlt,     bg: "#64748b", category: "Personalizado" },
+  { type: "text",         label: "Texto",          Icon: FaFont,            bg: "#374151", category: "Personalizado" },
+  { type: "custom",       label: "Personalizado",  Icon: FaPencilAlt,       bg: "#64748b", category: "Personalizado" },
 ];
 
 // ─── Estilos compartilhados de handle ────────────────────────────────────────
