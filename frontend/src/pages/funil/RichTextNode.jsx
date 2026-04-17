@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Handle, Position, NodeResizer, useReactFlow } from "@xyflow/react";
+import { Handle, Position, NodeResizer, useReactFlow, useUpdateNodeInternals } from "@xyflow/react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -196,6 +196,7 @@ export default function RichTextNode({ data, selected, id, width, height }) {
   const [showColors, setShowColors] = useState(false);
   const containerRef = useRef(null);
   const { setNodes } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
 
   const editor = useEditor({
     extensions: [
@@ -215,6 +216,7 @@ export default function RichTextNode({ data, selected, id, width, height }) {
           n.id === id ? { ...n, data: { ...n.data, richContent: html } } : n
         )
       );
+      if (!height) updateNodeInternals(id);
     },
   });
 
@@ -395,12 +397,12 @@ export default function RichTextNode({ data, selected, id, width, height }) {
             : "none",
           borderRadius: 6,
           outlineOffset: 2,
-          overflow: "hidden",
+          overflow: h ? "hidden" : "visible",
         }}
       >
         <EditorContent
           editor={editor}
-          style={{ outline: "none", height: h ? "100%" : "auto" }}
+          style={{ outline: "none", height: h ? "100%" : "auto", minHeight: 32 }}
         />
       </div>
     </div>
