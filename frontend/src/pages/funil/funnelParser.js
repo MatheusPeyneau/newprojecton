@@ -30,6 +30,15 @@ function extractCondition(line) {
   return m ? m[1] : null;
 }
 
+// Detecta ↓ no final de qualquer linha (bullet ou plain)
+// Retorna { clean, condition, hasArrow }
+function stripTrailingArrow(line) {
+  const m = line.match(/↓\s*(\([^)]+\))?\s*$/);
+  if (!m) return { clean: line, condition: null, hasArrow: false };
+  const condition = m[1] ? m[1].replace(/^\(|\)$/g, "").trim() : null;
+  return { clean: line.slice(0, m.index).trim(), condition, hasArrow: true };
+}
+
 let _counter = 0;
 function genId() {
   return `gen_${Date.now()}_${++_counter}`;
@@ -51,7 +60,7 @@ export function parseFunnelText(rawText) {
     const line = raw.trim();
     if (!line) continue;
 
-    // Arrow separator (↓ …)
+    // Arrow separator (↓ …) on its own line
     if (/^↓/.test(line)) {
       pendingCond = extractCondition(line);
       awaitNext = true;
@@ -61,36 +70,43 @@ export function parseFunnelText(rawText) {
     // Numbered step: "1. title" or "1) title"
     const nm = line.match(/^(\d+)[\.\)]\s+(.+)/);
     if (nm) {
+      const { clean, condition, hasArrow } = stripTrailingArrow(nm[2].trim());
       if (current) steps.push(current);
-      current = { title: nm[2].trim(), notes: [], condition: pendingCond };
+      current = { title: clean, notes: [], condition: pendingCond };
       pendingCond = null;
       awaitNext = false;
       skippedFirst = true;
+      if (hasArrow) { pendingCond = condition; awaitNext = true; }
       continue;
     }
 
     // Sub-bullet: "- note" or "• note"
     if (/^[-•*]\s/.test(line)) {
-      if (current) current.notes.push(line.replace(/^[-•*]\s+/, "").trim());
+      const text = line.replace(/^[-•*]\s+/, "").trim();
+      const { clean, condition, hasArrow } = stripTrailingArrow(text);
+      if (current && clean) current.notes.push(clean);
+      if (hasArrow) { pendingCond = condition; awaitNext = true; }
       continue;
     }
 
     // Plain line
     if (!skippedFirst && !awaitNext && !current) {
-      // Very first content line without a number or arrow = likely a title header → skip
       skippedFirst = true;
       continue;
     }
     skippedFirst = true;
 
+    const { clean: cleanLine, condition: trailCond, hasArrow } = stripTrailingArrow(line);
+
     if (awaitNext || !current) {
       if (current) steps.push(current);
-      current = { title: line, notes: [], condition: pendingCond };
+      current = { title: cleanLine, notes: [], condition: pendingCond };
       pendingCond = null;
       awaitNext = false;
     } else {
-      current.notes.push(line);
+      if (cleanLine) current.notes.push(cleanLine);
     }
+    if (hasArrow) { pendingCond = trailCond; awaitNext = true; }
   }
   if (current) steps.push(current);
   if (steps.length === 0) return { nodes: [], edges: [] };
