@@ -161,9 +161,26 @@ export function parseFunnelText(rawText) {
       },
     });
 
-    // Edge from previous node
-    if (nodes.length > 1) {
-      const prev = nodes[nodes.length - 2];
+    // Annotation text node for notes
+    if (step.notes.length > 0) {
+      const isBranch = Boolean(step.condition);
+      const NOTE_W = 160;
+      const noteX = isBranch ? x + 110 : x - NOTE_W - 20;
+      const noteY = y + 8;
+      const richContent = step.notes.map((n) => `<p>${n}</p>`).join("");
+      nodes.push({
+        id: genId(),
+        type: "text",
+        position: { x: noteX, y: noteY },
+        style: { width: NOTE_W },
+        data: { richContent, label: "", notes: "", url: "", imageB64: null, imageType: null },
+      });
+    }
+
+    // Edge from previous node (skip annotation nodes — always last 2 real nodes)
+    const realNodes = nodes.filter((n) => n.type !== "text");
+    if (realNodes.length > 1) {
+      const prev = realNodes[realNodes.length - 2];
       const dx = x - prev.position.x;
       const dy = y - prev.position.y;
       const isConditional = Boolean(step.condition);
@@ -180,7 +197,7 @@ export function parseFunnelText(rawText) {
       }
 
       edges.push({
-        id: `e_${nodes.length}`,
+        id: `e_${realNodes.length}`,
         source: prev.id,
         target: id,
         sourceHandle: srcHandle,
