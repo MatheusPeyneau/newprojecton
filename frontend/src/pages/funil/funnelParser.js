@@ -127,41 +127,102 @@ export function parseFunnelText(rawText) {
   if (steps.length === 0) return { nodes: [], edges: [] };
 
   // ── Pass 2: layout + build nodes/edges ──────────────────────────────────
-  const STEP_H   = 160;
-  const MAIN_X   = 240;
-  const BRANCH_X = 530;
+  //
+  // Layout strategy:
+  //   • Main column (left)  — steps sem condição, fluem de cima pra baixo
+  //   • Branch column (right) — steps com condição, ramificam a partir do
+  //     último nó MAIN (fork node), sem causar cruzamentos
+  //
+  //   Main sempre conecta de main→main (fluxo principal limpo)
+  //   Branch sempre conecta a partir do fork node (primeiro) ou do nó
+  //   anterior da branch (subsequentes)
+  //   Depois de branches, mainIdx avança para não sobrepor
+
+  const STEP_H   = 200;
+  const MAIN_X   = 280;
+  const BRANCH_X = 560;
+  const NOTE_W   = 165;
 
   const nodes = [];
   const edges = [];
 
-  let mainIdx  = 0; // counter for main-column steps
-  let inBranch = false;
-  let branchY  = 0;
+  // tracking
+  let mainIdx       = 0;
+  let branchIdx     = 0;
+  let forkMainIdx   = 0;     // mainIdx no momento do fork
+  let lastMainId    = null;  // último nó da coluna principal
+  let lastBranchId  = null;  // último nó da coluna branch
+  let inBranch      = false;
+
+  const addEdge = (sourceId, targetId, condition, targetX, targetY, sourceX, sourceY) => {
+    const dx = targetX - sourceX;
+    const dy = targetY - sourceY;
+    const isConditional = Boolean(condition);
+    const color = isConditional ? "#f97316" : "#3b82f6";
+
+    let srcHandle, tgtHandle;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      srcHandle = dx >= 0 ? "right" : "left";
+      tgtHandle = dx >= 0 ? "left"  : "right";
+    } else {
+      srcHandle = dy >= 0 ? "bottom" : "top";
+      tgtHandle = dy >= 0 ? "top"    : "bottom";
+    }
+
+    edges.push({
+      id: `e_${edges.length + 1}`,
+      source: sourceId,
+      target: targetId,
+      sourceHandle: srcHandle,
+      targetHandle: tgtHandle,
+      type: "default",
+      animated: true,
+      label: condition || undefined,
+      style: { stroke: color, strokeWidth: 2 },
+      markerEnd: { type: "arrowclosed", color },
+      labelStyle: { fontSize: 10, fill: "#ea580c", fontWeight: 600 },
+      labelBgStyle: { fill: "#fff7ed", fillOpacity: 0.95, borderRadius: 4 },
+    });
+  };
+
+  // cache de posição por id para achar coordenadas do source ao criar edge
+  const posMap = {};
 
   steps.forEach((step) => {
     const id   = genId();
     const type = detectType(step.title);
-
-    let x, y;
+    let x, y, sourceId;
 
     if (step.condition) {
+      // ── Branch step ────────────────────────────────────────────────────
       if (!inBranch) {
-        // First branch: same Y as previous node, shifted right
-        const prev = nodes[nodes.length - 1];
-        branchY = prev ? prev.position.y : 0;
-        inBranch = true;
-      } else {
-        // Continue branch downward
-        branchY += STEP_H;
+        // Primeira step da branch: alinhar Y com o fork node
+        inBranch    = true;
+        forkMainIdx = mainIdx - 1;
+        branchIdx   = 0;
+        lastBranchId = null;
       }
-      x = BRANCH_X;
-      y = branchY;
+      x        = BRANCH_X;
+      y        = forkMainIdx * STEP_H + branchIdx * STEP_H;
+      sourceId = lastBranchId ?? lastMainId; // primeiro branch → do fork; demais → do anterior da branch
+      branchIdx++;
+      lastBranchId = id;
     } else {
-      x = MAIN_X;
-      y = mainIdx * STEP_H;
+      // ── Main step ──────────────────────────────────────────────────────
+      if (inBranch) {
+        // Avançar mainIdx para além da altura da branch, evitando sobreposição
+        mainIdx  = Math.max(mainIdx, forkMainIdx + branchIdx);
+        inBranch = false;
+        lastBranchId = null;
+      }
+      x        = MAIN_X;
+      y        = mainIdx * STEP_H;
+      sourceId = lastMainId; // main sempre conecta de main→main
       mainIdx++;
-      inBranch = false;
+      lastMainId = id;
     }
+
+    posMap[id] = { x, y };
 
     nodes.push({
       id,
@@ -176,12 +237,10 @@ export function parseFunnelText(rawText) {
       },
     });
 
-    // Annotation text node for notes
+    // Annotation: notas como caixa de texto ao lado do nó
     if (step.notes.length > 0) {
-      const isBranch = Boolean(step.condition);
-      const NOTE_W = 160;
-      const noteX = isBranch ? x + 110 : x - NOTE_W - 20;
-      const noteY = y + 8;
+      const noteX = step.condition ? x + 110 : x - NOTE_W - 20;
+      const noteY = y + 6;
       const richContent = step.notes.map((n) => `<p>${n}</p>`).join("");
       nodes.push({
         id: genId(),
@@ -192,39 +251,10 @@ export function parseFunnelText(rawText) {
       });
     }
 
-    // Edge from previous node (skip annotation nodes — always last 2 real nodes)
-    const realNodes = nodes.filter((n) => n.type !== "text");
-    if (realNodes.length > 1) {
-      const prev = realNodes[realNodes.length - 2];
-      const dx = x - prev.position.x;
-      const dy = y - prev.position.y;
-      const isConditional = Boolean(step.condition);
-      const color = isConditional ? "#f97316" : "#3b82f6";
-
-      // Pick handles based on relative direction
-      let srcHandle, tgtHandle;
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        srcHandle = dx >= 0 ? "right" : "left";
-        tgtHandle = dx >= 0 ? "left"  : "right";
-      } else {
-        srcHandle = dy >= 0 ? "bottom" : "top";
-        tgtHandle = dy >= 0 ? "top"    : "bottom";
-      }
-
-      edges.push({
-        id: `e_${realNodes.length}`,
-        source: prev.id,
-        target: id,
-        sourceHandle: srcHandle,
-        targetHandle: tgtHandle,
-        type: "default",
-        animated: true,
-        label: step.condition || undefined,
-        style: { stroke: color, strokeWidth: 2 },
-        markerEnd: { type: "arrowclosed", color },
-        labelStyle: { fontSize: 10, fill: "#ea580c", fontWeight: 600 },
-        labelBgStyle: { fill: "#fff7ed", fillOpacity: 0.95, borderRadius: 4 },
-      });
+    // Edge
+    if (sourceId && posMap[sourceId]) {
+      const src = posMap[sourceId];
+      addEdge(sourceId, id, step.condition, x, y, src.x, src.y);
     }
   });
 
