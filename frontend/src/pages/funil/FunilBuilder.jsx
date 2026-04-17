@@ -22,6 +22,7 @@ import { ArrowLeft, Save, Loader2, Upload, FileText, X, MousePointer2, Hand, Ima
 import { nodeTypes as NODE_TYPES, NODE_DEFS } from "./nodeTypes";
 import NodePalette from "./NodePalette";
 import NodeConfig from "./NodeConfig";
+import { parseFunnelText, KEYWORD_HINTS } from "./funnelParser";
 
 const API = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
 const authHeaders = () => ({
@@ -306,6 +307,9 @@ function FunilBuilderInner() {
   const [customIcons, setCustomIcons] = useState([]);
   const [tool, setTool] = useState("select"); // "select" | "pan"
   const imageInputRef = useRef(null);
+  const [strategyTab, setStrategyTab] = useState("anotacoes"); // "anotacoes" | "gerar"
+  const [generatorText, setGeneratorText] = useState("");
+  const [showKeywords, setShowKeywords] = useState(false);
   const clipboardRef = useRef(null);
 
   const reactFlowWrapper = useRef(null);
@@ -651,6 +655,22 @@ function FunilBuilderInner() {
     setSelectedNode(null);
   }, [setNodes, setEdges, snapshot]);
 
+  // Gerar funil a partir do texto
+  const handleGenerate = useCallback(() => {
+    if (!generatorText.trim()) return;
+    const { nodes: newNodes, edges: newEdges } = parseFunnelText(generatorText);
+    if (newNodes.length === 0) return;
+    const hasContent = nodes.length > 0 || edges.length > 0;
+    if (hasContent && !window.confirm("Substituir o canvas atual pelo funil gerado?")) return;
+    snapshot();
+    setNodes(newNodes);
+    setEdges(newEdges);
+    setSelectedNode(null);
+    setStrategyOpen(false);
+    setTimeout(snapshot, 0);
+    setTimeout(() => rfInstance?.fitView({ padding: 0.2, duration: 400 }), 50);
+  }, [generatorText, nodes.length, edges.length, snapshot, setNodes, setEdges, rfInstance]);
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -807,31 +827,105 @@ function FunilBuilderInner() {
         )}
 
         {strategyOpen && (
-          <div className="w-72 shrink-0 border-l border-border bg-card flex flex-col">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+          <div className="w-80 shrink-0 border-l border-border bg-card flex flex-col">
+            {/* Header */}
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border shrink-0">
               <FileText size={14} className="text-muted-foreground" />
-              <span className="text-sm font-semibold flex-1">Descrição da Estratégia</span>
-              <button
-                onClick={() => { setStrategyOpen(false); silentSave(); }}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
+              <span className="text-sm font-semibold flex-1">Estratégia</span>
+              <button onClick={() => { setStrategyOpen(false); silentSave(); }} className="text-muted-foreground hover:text-foreground transition-colors">
                 <X size={14} />
               </button>
             </div>
-            <textarea
-              value={strategy}
-              onChange={(e) => setStrategy(e.target.value)}
-              placeholder="Descreva o passo a passo da estratégia deste funil..."
-              className="flex-1 resize-none p-4 text-sm bg-transparent focus:outline-none"
-            />
-            <div className="px-4 py-3 border-t border-border">
-              <button
-                onClick={() => { setStrategyOpen(false); silentSave(); }}
-                className="w-full text-sm bg-primary text-primary-foreground hover:bg-primary/90 px-3 py-1.5 rounded-lg transition-colors"
-              >
-                Salvar e fechar
-              </button>
+
+            {/* Tabs */}
+            <div className="flex border-b border-border shrink-0">
+              {[["anotacoes", "Anotações"], ["gerar", "⚡ Gerar Funil"]].map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setStrategyTab(key)}
+                  className={`flex-1 text-xs py-2 font-medium transition-colors ${
+                    strategyTab === key
+                      ? "border-b-2 border-primary text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
+
+            {/* Tab: Anotações */}
+            {strategyTab === "anotacoes" && (
+              <>
+                <textarea
+                  value={strategy}
+                  onChange={(e) => setStrategy(e.target.value)}
+                  placeholder="Descreva o passo a passo da estratégia deste funil..."
+                  className="flex-1 resize-none p-4 text-sm bg-transparent focus:outline-none"
+                />
+                <div className="px-4 py-3 border-t border-border shrink-0">
+                  <button
+                    onClick={() => { setStrategyOpen(false); silentSave(); }}
+                    className="w-full text-sm bg-primary text-primary-foreground hover:bg-primary/90 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    Salvar e fechar
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Tab: Gerar Funil */}
+            {strategyTab === "gerar" && (
+              <>
+                {/* Keywords */}
+                <div className="border-b border-border shrink-0">
+                  <button
+                    onClick={() => setShowKeywords((v) => !v)}
+                    className="w-full flex items-center justify-between px-4 py-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <span>Palavras-chave disponíveis</span>
+                    <span>{showKeywords ? "▲" : "▼"}</span>
+                  </button>
+                  {showKeywords && (
+                    <div className="px-4 pb-3 space-y-0.5 max-h-48 overflow-y-auto">
+                      {KEYWORD_HINTS.map(({ icon, label, kws }) => (
+                        <div key={label} className="flex gap-1.5 text-[10px]">
+                          <span className="shrink-0 w-4">{icon}</span>
+                          <span className="font-medium text-foreground w-24 shrink-0">{label}</span>
+                          <span className="text-muted-foreground">{kws}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Format hint */}
+                <div className="px-4 pt-3 pb-2 shrink-0">
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    Use <code className="bg-muted px-0.5 rounded">1.</code> para numerar etapas e <code className="bg-muted px-0.5 rounded">↓</code> para separar. Sub-itens com <code className="bg-muted px-0.5 rounded">-</code> viram notas. Condicionais com <code className="bg-muted px-0.5 rounded">↓ (se recusar)</code>.
+                  </p>
+                </div>
+
+                {/* Textarea */}
+                <textarea
+                  value={generatorText}
+                  onChange={(e) => setGeneratorText(e.target.value)}
+                  placeholder={"1. Meta Ads\n↓\n2. Página de Vendas\n   - Foco em conversão rápida\n↓\n3. Checkout\n↓ (se recusar)\n4. Oferta de R$37/mês"}
+                  className="flex-1 resize-none px-4 py-2 text-xs bg-transparent focus:outline-none font-mono leading-relaxed"
+                />
+
+                {/* Generate button */}
+                <div className="px-4 py-3 border-t border-border shrink-0">
+                  <button
+                    onClick={handleGenerate}
+                    disabled={!generatorText.trim()}
+                    className="w-full text-sm bg-primary text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded-lg transition-colors font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    ⚡ Gerar Funil
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

@@ -253,10 +253,18 @@ class WebhookSettings(BaseModel):
 class FunnelCreate(BaseModel):
     name: str = Field(..., max_length=255)
     flow_data: dict = {}
+    strategy: Optional[str] = Field(None, max_length=50000)
 
 class FunnelUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=255)
     flow_data: Optional[dict] = None
+    strategy: Optional[str] = Field(None, max_length=50000)
+
+class CustomIconCreate(BaseModel):
+    name: str = Field(..., max_length=100)
+    image_b64: str
+    image_type: str = "image/png"
+    bg_color: str = "#64748b"
 
 class RecurringExpenseCreate(BaseModel):
     name: str = Field(..., max_length=255)
@@ -3421,6 +3429,36 @@ async def delete_funnel(funnel_id: str, current_user: dict = Depends(get_current
     result = await db.funnels.delete_one({"funnel_id": funnel_id, "org_id": current_user["org_id"]})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Funil não encontrado")
+
+
+# ─── Custom Icons (per user) ─────────────────────────────────────────────────
+
+@api_router.get("/custom-icons")
+async def list_custom_icons(current_user: dict = Depends(get_current_user)):
+    icons = await db.custom_icons.find(
+        {"user_id": current_user["user_id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
+    return icons
+
+@api_router.post("/custom-icons", status_code=201)
+async def create_custom_icon(body: CustomIconCreate, current_user: dict = Depends(get_current_user)):
+    icon_id = f"icon_{uuid.uuid4().hex[:10]}"
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "icon_id": icon_id,
+        "user_id": current_user["user_id"],
+        "org_id": current_user["org_id"],
+        **body.model_dump(),
+        "created_at": now,
+    }
+    await db.custom_icons.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+@api_router.delete("/custom-icons/{icon_id}", status_code=204)
+async def delete_custom_icon(icon_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.custom_icons.delete_one({"icon_id": icon_id, "user_id": current_user["user_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Ícone não encontrado")
 
 
 # ─── Recurring Expenses ───────────────────────────────────────────────────────
