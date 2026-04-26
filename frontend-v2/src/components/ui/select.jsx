@@ -4,22 +4,33 @@ import { ChevronDown } from 'lucide-react';
 
 const SelectContext = createContext(null);
 
-export function Select({ value, onValueChange, defaultValue, children }) {
+export function Select({ value, onValueChange, children }) {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState('');
-  const ref = useRef(null);
+  const [rect, setRect] = useState(null);
+  const triggerRef = useRef(null);
 
   useEffect(() => {
+    if (!open) return;
     const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (!e.target.closest('[data-select-content]') && !e.target.closest('[data-select-trigger]')) {
+        setOpen(false);
+      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  }, [open]);
+
+  const openDropdown = () => {
+    if (triggerRef.current) {
+      setRect(triggerRef.current.getBoundingClientRect());
+    }
+    setOpen(v => !v);
+  };
 
   return (
-    <SelectContext.Provider value={{ value, onValueChange, open, setOpen, label, setLabel }}>
-      <div ref={ref} className="relative">{children}</div>
+    <SelectContext.Provider value={{ value, onValueChange, open, setOpen, label, setLabel, rect, triggerRef, openDropdown }}>
+      <div className="relative">{children}</div>
     </SelectContext.Provider>
   );
 }
@@ -29,7 +40,9 @@ export function SelectTrigger({ className, children, ...props }) {
   return (
     <button
       type="button"
-      onClick={() => ctx?.setOpen(v => !v)}
+      ref={ctx?.triggerRef}
+      data-select-trigger
+      onClick={ctx?.openDropdown}
       className={cn(
         'flex h-9 w-full items-center justify-between rounded-lg border border-border bg-background px-3 py-1 text-sm text-foreground hover:bg-muted/50 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50',
         className
@@ -54,11 +67,28 @@ export function SelectValue({ placeholder }) {
 
 export function SelectContent({ className, children }) {
   const ctx = useContext(SelectContext);
-  if (!ctx?.open) return null;
+  if (!ctx?.open || !ctx?.rect) return null;
+
+  const r = ctx.rect;
+  const spaceBelow = window.innerHeight - r.bottom;
+  const openUp = spaceBelow < 200 && r.top > 200;
+
+  const style = {
+    position: 'fixed',
+    left: r.left,
+    width: Math.max(r.width, 160),
+    zIndex: 9999,
+    ...(openUp
+      ? { bottom: window.innerHeight - r.top, top: 'auto' }
+      : { top: r.bottom + 4 }),
+  };
+
   return (
     <div
+      data-select-content
+      style={style}
       className={cn(
-        'absolute top-full left-0 z-[200] mt-1 w-full min-w-max rounded-lg border border-border bg-card shadow-lg py-1',
+        'rounded-lg border border-border bg-card shadow-xl py-1 max-h-60 overflow-y-auto',
         className
       )}
       onMouseDown={(e) => e.stopPropagation()}
