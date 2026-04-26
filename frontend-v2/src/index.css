@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html { background: #ffffff; }
+html.dark { background: #0a0a0a; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+}
+
+#root {
+  width: 100%;
+  text-align: left;
+}
+
+.num {
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-hover {
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background-color .18s ease;
+}
+.card-hover:hover {
+  transform: translateY(-1px);
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 8px; }
+html.dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); }
+
+.recharts-cartesian-axis-tick text { fill: rgba(10,10,10,0.5); font-size: 11px; }
+html.dark .recharts-cartesian-axis-tick text { fill: rgba(255,255,255,0.45); }
+.recharts-cartesian-grid line { stroke: rgba(10,10,10,0.06); }
+html.dark .recharts-cartesian-grid line { stroke: rgba(255,255,255,0.06); }
+.recharts-tooltip-wrapper:focus { outline: none; }
+.recharts-surface { overflow: visible; }
