@@ -1265,7 +1265,7 @@ function DefaultPipelineBoard() {
 }
 
 
-// ——— Globe2 Chat Panel (Sheet) ———
+// ——— Instagram Chat Panel (Sheet) ———
 function InstagramChatPanel({ deal, open, onClose }) {
   const [conversation, setConversation] = useState(null);
   const [loadingConv, setLoadingConv] = useState(false);
@@ -1278,7 +1278,7 @@ function InstagramChatPanel({ deal, open, onClose }) {
     setLoadingConv(true);
     try {
       // Find or create conversation by instagram_scoped_id or deal
-      const res = await axios.get(`${API}/Globe2/conversations`, { headers: getAuthHeader() });
+      const res = await axios.get(`${API}/instagram/conversations`, { headers: getAuthHeader() });
       const handle = deal.instagram_handle?.replace("@", "") || "";
       // Try to find by handle or lead_id
       const found = res.data.find(c =>
@@ -1286,10 +1286,10 @@ function InstagramChatPanel({ deal, open, onClose }) {
         c.lead_id === deal.lead_id
       );
       if (found) {
-        const detail = await axios.get(`${API}/Globe2/conversations/${found.conversation_id}`, { headers: getAuthHeader() });
+        const detail = await axios.get(`${API}/instagram/conversations/${found.conversation_id}`, { headers: getAuthHeader() });
         setConversation(detail.data);
         // Mark all as read
-        await axios.patch(`${API}/Globe2/conversations/${found.conversation_id}/read-all`, {}, { headers: getAuthHeader() });
+        await axios.patch(`${API}/instagram/conversations/${found.conversation_id}/read-all`, {}, { headers: getAuthHeader() });
       } else {
         setConversation(null);
       }
@@ -1311,7 +1311,7 @@ function InstagramChatPanel({ deal, open, onClose }) {
     setSending(true);
     try {
       const res = await axios.post(
-        `${API}/Globe2/conversations/${conversation.conversation_id}/messages`,
+        `${API}/instagram/conversations/${conversation.conversation_id}/messages`,
         { text: message.trim() },
         { headers: getAuthHeader() }
       );
@@ -1328,7 +1328,7 @@ function InstagramChatPanel({ deal, open, onClose }) {
 
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0" data-testid="Globe2-chat-panel">
+      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0" data-testid="instagram-chat-panel">
         <SheetHeader className="px-4 py-3 border-b border-border shrink-0">
           <div className="flex items-center justify-between">
             <div>
@@ -1366,7 +1366,7 @@ function InstagramChatPanel({ deal, open, onClose }) {
               <Globe2 size={32} className="text-muted-foreground mb-3" />
               <p className="text-sm text-muted-foreground">Nenhuma conversa encontrada.</p>
               <p className="text-xs text-muted-foreground mt-1">
-                As mensagens aparecerão aqui quando o lead responder via Globe2.
+                As mensagens aparecerão aqui quando o lead responder via Instagram.
               </p>
             </div>
           ) : (
@@ -1426,7 +1426,7 @@ function InstagramChatPanel({ deal, open, onClose }) {
   );
 }
 
-// ——— Globe2 Deal Card ———
+// ——— Instagram Deal Card ———
 function InstagramDealCard({ deal, unreadCount, onClick }) {
   return (
     <div
@@ -1463,7 +1463,7 @@ function InstagramDealCard({ deal, unreadCount, onClick }) {
   );
 }
 
-// ——— Globe2 Pipeline Board ———
+// ——— Instagram Pipeline Board ———
 function InstagramPipelineBoard() {
   const [stages, setStages] = useState([]);
   const [deals, setDeals] = useState([]);
@@ -1476,9 +1476,9 @@ function InstagramPipelineBoard() {
   const fetchData = async () => {
     try {
       const [stR, dR, convR] = await Promise.all([
-        axios.get(`${API}/pipeline/stages?type=Globe2`, { headers: getAuthHeader() }),
-        axios.get(`${API}/pipeline/deals?pipeline_type=Globe2`, { headers: getAuthHeader() }),
-        axios.get(`${API}/Globe2/conversations`, { headers: getAuthHeader() }).catch(() => ({ data: [] })),
+        axios.get(`${API}/pipeline/stages?type=instagram`, { headers: getAuthHeader() }),
+        axios.get(`${API}/pipeline/deals?pipeline_type=instagram`, { headers: getAuthHeader() }),
+        axios.get(`${API}/instagram/conversations`, { headers: getAuthHeader() }).catch(() => ({ data: [] })),
       ]);
       setStages(stR.data);
       setDeals(dR.data);
@@ -1521,7 +1521,7 @@ function InstagramPipelineBoard() {
       <div className="flex items-center justify-between mb-4 shrink-0">
         <div>
           <p className="text-sm text-muted-foreground">
-            {deals.length} lead{deals.length !== 1 ? "s" : ""} no pipeline Globe2
+            {deals.length} lead{deals.length !== 1 ? "s" : ""} no pipeline Instagram
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1626,7 +1626,7 @@ function NewInstagramStageDialog({ open, onClose, onCreated }) {
     try {
       const res = await axios.post(
         `${API}/pipeline/stages`,
-        { name: name.trim(), color, pipeline_type: "Globe2", order: 0 },
+        { name: name.trim(), color, pipeline_type: "Instagram", order: 0 },
         { headers: getAuthHeader() }
       );
       onCreated(res.data);
@@ -1643,7 +1643,7 @@ function NewInstagramStageDialog({ open, onClose, onCreated }) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Globe2 size={15} className="text-purple-500" />
-            Nova Etapa — Pipeline Globe2
+            Nova Etapa — pipeline Instagram
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -1696,16 +1696,16 @@ export default function Pipeline() {
           <h1 className="text-2xl font-heading font-bold tracking-tight">Pipeline de Vendas</h1>
           <TabsList data-testid="pipeline-tabs">
             <TabsTrigger value="default" data-testid="tab-pipeline-principal">Pipeline Principal</TabsTrigger>
-            <TabsTrigger value="Globe2" data-testid="tab-pipeline-Globe2">
+            <TabsTrigger value="Instagram" data-testid="tab-pipeline-Globe2">
               <Globe2 size={13} className="mr-1.5 text-purple-500" />
-              Pipeline Globe2
+              pipeline Instagram
             </TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="default" className="flex-1 min-h-0 mt-0">
           <DefaultPipelineBoard />
         </TabsContent>
-        <TabsContent value="Globe2" className="flex-1 min-h-0 mt-0">
+        <TabsContent value="Instagram" className="flex-1 min-h-0 mt-0">
           <InstagramPipelineBoard />
         </TabsContent>
       </Tabs>
