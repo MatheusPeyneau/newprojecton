@@ -22,15 +22,16 @@ export default function Login() {
     setLoading(true);
     try {
       if (tab === 'register') {
-        await api.post('/auth/register', { full_name: form.full_name, email: form.email, password: form.password });
+        await api.post('/auth/register', { name: form.full_name, email: form.email, password: form.password });
       }
       const { data } = await api.post('/auth/login', { email: form.email, password: form.password });
-      setToken(data.access_token);
+      setToken(data.token || data.access_token);
       const me = await api.get('/auth/me');
       setUser(me.data);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Erro ao autenticar. Verifique seus dados.');
+      const detail = err.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'Erro ao autenticar. Verifique seus dados.');
     } finally {
       setLoading(false);
     }
