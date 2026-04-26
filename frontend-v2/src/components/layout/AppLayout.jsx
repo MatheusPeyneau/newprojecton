@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import { getToken, getUser } from '../../lib/auth';
@@ -42,6 +43,7 @@ export default function AppLayout() {
           <Outlet context={{ user }} />
         </main>
       </div>
+      <Toaster richColors position="top-right" />
     </div>
   );
 }

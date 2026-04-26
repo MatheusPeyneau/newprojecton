@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { KpiGrid, SkeletonKpi, formatCurrency, formatNumber, formatPercent } from '../components/shared/KpiCard';
 import MrrChart from '../components/shared/MrrChart';
