@@ -9,7 +9,8 @@ const NAV_MAIN = [
   { id: 'operacional',  label: 'Operacional',   icon: I.Briefcase, to: '/operacional' },
   { id: 'financeiro',   label: 'Financeiro',    icon: I.Wallet,    to: '/financeiro' },
   { id: 'conteudo',     label: 'Conteúdo',      icon: I.FileText,  to: '/conteudo' },
-  { id: 'funil',        label: 'Funil',         icon: I.Funnel,    to: '/funil' },
+  { id: 'funil',        label: 'Funil',         icon: I.Funnel,       to: '/funil' },
+  { id: 'conversas',   label: 'Conversas',     icon: I.MessageSquare, to: '/conversas' },
 ];
 
 const NAV_FOOTER = [

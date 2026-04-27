@@ -822,6 +822,155 @@ function Accordion({ title, icon: Icon, defaultOpen = false, children }) {
   );
 }
 
+const BOT_URL_KEY = 'fluxscale.whatsapp_bot_url';
+
+export function WhatsAppBotSection() {
+  const [botUrl, setBotUrl] = useState(() => localStorage.getItem(BOT_URL_KEY) || '');
+  const [inputUrl, setInputUrl] = useState(() => localStorage.getItem(BOT_URL_KEY) || '');
+  const [status, setStatus] = useState('unknown');
+  const [qrDataUrl, setQrDataUrl] = useState(null);
+  const [showQr, setShowQr] = useState(false);
+  const [phone, setPhone] = useState(null);
+  const [polling, setPolling] = useState(false);
+
+  const fetchStatus = React.useCallback(async (url) => {
+    const target = url || botUrl;
+    if (!target) return;
+    try {
+      const res = await fetch(`${target}/api/status`);
+      const data = await res.json();
+      setStatus(data.status);
+      setQrDataUrl(data.qrDataUrl || null);
+      setPhone(data.phone || null);
+      if (data.status === 'connected') setShowQr(false);
+    } catch {
+      setStatus('offline');
+    }
+  }, [botUrl]);
+
+  useEffect(() => {
+    if (!botUrl) return;
+    fetchStatus(botUrl);
+    const t = setInterval(() => fetchStatus(botUrl), 4000);
+    return () => clearInterval(t);
+  }, [botUrl, fetchStatus]);
+
+  const handleSaveUrl = () => {
+    const trimmed = inputUrl.trim().replace(/\/$/, '');
+    setBotUrl(trimmed);
+    localStorage.setItem(BOT_URL_KEY, trimmed);
+    setStatus('unknown');
+    setTimeout(() => fetchStatus(trimmed), 200);
+    toast.success('URL do bot salva!');
+  };
+
+  const statusLabel = {
+    connected: { text: 'Conectado', color: 'text-emerald-500' },
+    qr: { text: 'Aguardando QR scan', color: 'text-amber-500' },
+    initializing: { text: 'Iniciando...', color: 'text-blue-500' },
+    disconnected: { text: 'Desconectado', color: 'text-red-500' },
+    offline: { text: 'Bot offline', color: 'text-red-500' },
+    unknown: { text: '—', color: 'text-muted-foreground' },
+  }[status] || { text: status, color: 'text-muted-foreground' };
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-5 mb-4">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-sm font-heading font-semibold flex items-center gap-2">
+          <svg viewBox="0 0 24 24" fill="#25d366" className="w-4 h-4 shrink-0">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+          </svg>
+          WhatsApp — Bot Local
+        </h2>
+        {botUrl && (
+          <span className={cn('text-xs font-medium', statusLabel.color)}>
+            ● {statusLabel.text}
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground mb-4">
+        Conecte o bot WhatsApp local para enviar e receber mensagens direto na aba <strong>Conversas</strong>.
+        O bot deve estar rodando em sua máquina (<code className="font-mono text-[11px]">node index.js</code>).
+      </p>
+
+      {/* Bot URL */}
+      <div className="space-y-1.5 mb-4">
+        <Label className="text-sm font-medium">URL da API do Bot</Label>
+        <div className="flex gap-2">
+          <Input
+            placeholder="http://localhost:3001"
+            value={inputUrl}
+            onChange={e => setInputUrl(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSaveUrl()}
+          />
+          <Button onClick={handleSaveUrl} disabled={!inputUrl.trim()}>
+            Salvar
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Porta padrão do bot: <code className="font-mono">3001</code>. Em produção, use a URL pública do servidor.
+        </p>
+      </div>
+
+      {/* Status + actions */}
+      {botUrl && (
+        <div className="space-y-3">
+          {/* Connected state */}
+          {status === 'connected' && (
+            <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg px-4 py-3">
+              <CheckCircle2 size={16} />
+              <span>
+                Conectado{phone ? ` · +${phone}` : ''}. Acesse a aba <strong>Conversas</strong> para ver as mensagens.
+              </span>
+            </div>
+          )}
+
+          {/* QR code modal */}
+          {(status === 'qr' || showQr) && qrDataUrl && (
+            <div className="border border-border rounded-lg p-4 flex flex-col items-center gap-3">
+              <p className="text-xs font-semibold text-center">
+                Escaneie o QR Code com o WhatsApp do celular
+              </p>
+              <img src={qrDataUrl} alt="QR Code WhatsApp" className="w-48 h-48 rounded-lg" />
+              <p className="text-[11px] text-muted-foreground text-center">
+                Abra o WhatsApp → ··· → Dispositivos conectados → Conectar dispositivo
+              </p>
+            </div>
+          )}
+
+          {/* Button to show QR / link number */}
+          {status !== 'connected' && (
+            <Button
+              variant={status === 'qr' ? 'outline' : 'default'}
+              onClick={() => {
+                setShowQr(v => !v);
+                fetchStatus(botUrl);
+              }}
+              disabled={status === 'offline' || status === 'unknown'}
+              className="w-full"
+            >
+              {status === 'qr'
+                ? (showQr ? 'Ocultar QR Code' : 'Ver QR Code')
+                : 'Vincular número'}
+            </Button>
+          )}
+
+          {status === 'disconnected' && (
+            <p className="text-xs text-muted-foreground text-center">
+              O bot está desconectado. Reinicie-o com <code className="font-mono">npm start</code> na pasta do bot.
+            </p>
+          )}
+          {status === 'offline' && (
+            <p className="text-xs text-red-500 text-center">
+              Não foi possível conectar à URL configurada. Verifique se o bot está rodando.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Configuracoes() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -893,6 +1042,7 @@ export default function Configuracoes() {
           settingKey="carousel"
           payloadPreview={`{\n  "jobId": "job_abc123",\n  "clientId": "uuid",\n  "clientName": "Nome do Cliente",\n  "niche": "Empresa / Segmento",\n  "notes": "Notas do nicho...",\n  "email": "cliente@exemplo.com",\n  "requestedAt": "2025-01-01T00:00:00Z"\n}`}
         />
+        <WhatsAppBotSection />
         <WhatsAppWebhookSection />
         <MeetingWebhookSection />
         <InstagramApiSection />

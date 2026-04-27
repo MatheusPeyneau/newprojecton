@@ -14,6 +14,7 @@ import FunilList from './pages/funil/FunilList';
 import FunilBuilder from './pages/funil/FunilBuilder';
 import Configuracoes from './pages/configuracoes/Configuracoes';
 import Admin from './pages/admin/Admin';
+import Conversas from './pages/conversas/Conversas';
 
 export default function App() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/funil/:funnelId" element={<FunilBuilder />} />
           <Route path="/configuracoes" element={<Configuracoes />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/conversas" element={<Conversas />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
