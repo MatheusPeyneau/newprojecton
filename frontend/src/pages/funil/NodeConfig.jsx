@@ -34,6 +34,64 @@ export default function NodeConfig({ node, onChange, onClose, onDelete }) {
 
   if (!node) return null;
 
+  // ─── Frame config ─────────────────────────────────────────────────────────────
+  if (node.type === "frame") {
+    return (
+      <div className="w-64 shrink-0 border-l border-border bg-card flex flex-col">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <span className="text-sm font-semibold text-foreground">Frame / Grupo</span>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+            <X size={15} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Nome</label>
+            <input
+              type="text"
+              value={data.label || ""}
+              onChange={(e) => update("label", e.target.value)}
+              placeholder="Grupo..."
+              className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Cor da borda</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={data.borderColor || "#6366f1"}
+                onChange={(e) => update("borderColor", e.target.value)}
+                className="w-8 h-8 rounded border border-border cursor-pointer"
+              />
+              <span className="text-xs text-muted-foreground">{data.borderColor || "#6366f1"}</span>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Cor de fundo</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={data.bgColor && data.bgColor.startsWith("rgba") ? "#6366f1" : (data.bgColor || "#6366f1")}
+                onChange={(e) => update("bgColor", e.target.value + "26")}
+                className="w-8 h-8 rounded border border-border cursor-pointer"
+              />
+              <span className="text-xs text-muted-foreground">transparência fixa ~15%</span>
+            </div>
+          </div>
+        </div>
+        <div className="px-4 py-3 border-t border-border shrink-0">
+          <button
+            onClick={() => onDelete(node.id)}
+            className="w-full flex items-center justify-center gap-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200 hover:border-red-400 rounded-lg py-2 transition-colors"
+          >
+            <Trash2 size={13} /> Excluir frame
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-64 shrink-0 border-l border-border bg-card flex flex-col">
       {/* Header */}

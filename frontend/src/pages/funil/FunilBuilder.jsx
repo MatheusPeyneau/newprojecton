@@ -18,11 +18,13 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import { ArrowLeft, Save, Loader2, Upload, FileText, X, MousePointer2, Hand, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Upload, FileText, X, MousePointer2, Hand, Image as ImageIcon, Grid, Download, Copy, ArrowUp, ArrowDown, Lock, Trash2, Square } from "lucide-react";
 import { nodeTypes as NODE_TYPES, NODE_DEFS } from "./nodeTypes";
 import NodePalette from "./NodePalette";
 import NodeConfig from "./NodeConfig";
 import { parseFunnelText, KEYWORD_HINTS } from "./funnelParser";
+import { NodeActionsContext } from "./NodeActionsContext";
+import { getNodesBounds, getViewportForBounds } from "@xyflow/react";
 
 const API = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
 const authHeaders = () => ({
@@ -306,6 +308,7 @@ function FunilBuilderInner() {
   const [strategyOpen, setStrategyOpen] = useState(false);
   const [customIcons, setCustomIcons] = useState([]);
   const [tool, setTool] = useState("select"); // "select" | "pan"
+  const [snapGrid, setSnapGrid] = useState(false);
   const imageInputRef = useRef(null);
   const [strategyTab, setStrategyTab] = useState("anotacoes"); // "anotacoes" | "gerar"
   const [generatorText, setGeneratorText] = useState("");
@@ -600,6 +603,82 @@ function FunilBuilderInner() {
     setCustomIcons((prev) => prev.filter((ic) => ic.icon_id !== iconId));
   }, []);
 
+  // ─── Exportar ─────────────────────────────────────────────────────────────────
+  const [exportOpen, setExportOpen] = useState(false);
+
+  const downloadBlob = (url, filename) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+  };
+
+  const exportJSON = useCallback(() => {
+    if (!rfInstance) return;
+    const data = JSON.stringify(rfInstance.toObject(), null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    downloadBlob(URL.createObjectURL(blob), `${funnelName || "funil"}.json`);
+    setExportOpen(false);
+  }, [rfInstance, funnelName]);
+
+  const getPNGDataUrl = useCallback(async () => {
+    const { toPng } = await import("html-to-image");
+    const bounds = getNodesBounds(nodesRef.current);
+    const W = 1400, H = 900;
+    const viewport = getViewportForBounds(bounds, W, H, 0.5, 2, 32);
+    const el = document.querySelector(".react-flow__viewport");
+    if (!el) return null;
+    return toPng(el, {
+      backgroundColor: "#f9fafb",
+      width: W,
+      height: H,
+      style: { transform: `translate(${viewport.x}px,${viewport.y}px) scale(${viewport.zoom})`, transformOrigin: "0 0" },
+    });
+  }, []);
+
+  const exportPNG = useCallback(async () => {
+    const dataUrl = await getPNGDataUrl();
+    if (dataUrl) downloadBlob(dataUrl, `${funnelName || "funil"}.png`);
+    setExportOpen(false);
+  }, [getPNGDataUrl, funnelName]);
+
+  const exportPDF = useCallback(async () => {
+    const dataUrl = await getPNGDataUrl();
+    if (!dataUrl) return;
+    const { default: jsPDF } = await import("jspdf");
+    const pdf = new jsPDF({ orientation: "landscape", format: "a4" });
+    pdf.addImage(dataUrl, "PNG", 0, 0, 297, 210);
+    pdf.save(`${funnelName || "funil"}.pdf`);
+    setExportOpen(false);
+  }, [getPNGDataUrl, funnelName]);
+
+  // ─── Templates ────────────────────────────────────────────────────────────────
+  const [templateModal, setTemplateModal] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateDesc, setTemplateDesc] = useState("");
+  const [templateSaving, setTemplateSaving] = useState(false);
+
+  const saveAsTemplate = useCallback(async () => {
+    if (!templateName.trim() || !rfInstance) return;
+    setTemplateSaving(true);
+    try {
+      await fetch(`${API}/api/funnel-templates`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          name: templateName.trim(),
+          description: templateDesc.trim(),
+          flow_data: rfInstance.toObject(),
+        }),
+      });
+      setTemplateModal(false);
+      setTemplateName("");
+      setTemplateDesc("");
+    } finally {
+      setTemplateSaving(false);
+    }
+  }, [rfInstance, templateName, templateDesc]);
+
   // Drop no canvas
   const onDrop = useCallback(
     (e) => {
@@ -655,6 +734,48 @@ function FunilBuilderInner() {
     setSelectedNode(null);
   }, [setNodes, setEdges, snapshot]);
 
+  // Toolbar contextual — ações de nó
+  const duplicateNode = useCallback((nodeId) => {
+    const node = nodesRef.current.find((n) => n.id === nodeId);
+    if (!node) return;
+    snapshot();
+    const id = newId();
+    setNodes((ns) => [...ns, { ...node, id, position: { x: node.position.x + 30, y: node.position.y + 30 }, selected: false }]);
+  }, [setNodes, snapshot]);
+
+  const bringToFront = useCallback((nodeId) => {
+    setNodes((ns) => { const n = ns.find((x) => x.id === nodeId); return n ? [...ns.filter((x) => x.id !== nodeId), n] : ns; });
+  }, [setNodes]);
+
+  const sendToBack = useCallback((nodeId) => {
+    setNodes((ns) => { const n = ns.find((x) => x.id === nodeId); return n ? [n, ...ns.filter((x) => x.id !== nodeId)] : ns; });
+  }, [setNodes]);
+
+  const lockNode = useCallback((nodeId) => {
+    setNodes((ns) => ns.map((n) => n.id === nodeId ? { ...n, draggable: n.data?.locked, data: { ...n.data, locked: !n.data?.locked } } : n));
+  }, [setNodes]);
+
+  const nodeActions = React.useMemo(() => ({
+    duplicateNode, bringToFront, sendToBack, lockNode, deleteNode,
+  }), [duplicateNode, bringToFront, sendToBack, lockNode, deleteNode]);
+
+  const createFrame = useCallback(() => {
+    if (!rfInstance) return;
+    const { x, y, zoom } = rfInstance.getViewport();
+    const centerX = (-x + window.innerWidth / 2) / zoom;
+    const centerY = (-y + window.innerHeight / 2) / zoom;
+    const frameNode = {
+      id: newId(),
+      type: "frame",
+      position: { x: centerX - 160, y: centerY - 120 },
+      style: { width: 320, height: 240 },
+      data: { label: "Grupo", bgColor: "rgba(99,102,241,0.05)", borderColor: "#6366f1" },
+      zIndex: -1,
+    };
+    snapshot();
+    setNodes((ns) => [frameNode, ...ns]);
+  }, [rfInstance, setNodes, snapshot]);
+
   // Gerar funil a partir do texto
   const handleGenerate = useCallback(() => {
     if (!generatorText.trim()) return;
@@ -702,6 +823,43 @@ function FunilBuilderInner() {
               {saveMsg}
             </span>
           )}
+          {/* Export dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setExportOpen((v) => !v)}
+              title="Exportar"
+              className="p-1.5 rounded transition-colors text-muted-foreground hover:text-foreground hover:bg-muted"
+            >
+              <Download size={16} />
+            </button>
+            {exportOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setExportOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-lg py-1 w-40">
+                  {[
+                    { label: "JSON", action: exportJSON },
+                    { label: "PNG (imagem)", action: exportPNG },
+                    { label: "PDF", action: exportPDF },
+                  ].map(({ label, action }) => (
+                    <button
+                      key={label}
+                      onClick={action}
+                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted transition-colors"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <button
+            onClick={() => { setTemplateName(funnelName || ""); setTemplateDesc(""); setTemplateModal(true); }}
+            title="Salvar como template"
+            className="p-1.5 rounded transition-colors text-muted-foreground hover:text-foreground hover:bg-muted text-xs"
+          >
+            Template
+          </button>
           <button
             onClick={() => setStrategyOpen((v) => !v)}
             title="Descrição da estratégia"
@@ -767,6 +925,36 @@ function FunilBuilderInner() {
             ))}
             {/* Separador */}
             <div style={{ width: 1, height: 20, background: "#e5e7eb", margin: "0 2px" }} />
+            {/* Snap Grid */}
+            <button
+              onClick={() => setSnapGrid(v => !v)}
+              title={snapGrid ? "Desativar Snap Grid" : "Ativar Snap Grid"}
+              style={{
+                width: 32, height: 32, borderRadius: 8, border: "none",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                background: snapGrid ? "#eff6ff" : "none",
+                color: snapGrid ? "#3b82f6" : "#6b7280",
+                transition: "all 0.15s",
+              }}
+            >
+              <Grid size={15} />
+            </button>
+            {/* Frame */}
+            <button
+              onClick={createFrame}
+              title="Criar Frame / Grupo"
+              style={{
+                width: 32, height: 32, borderRadius: 8, border: "none",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                background: "none", color: "#6b7280", transition: "all 0.15s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#f3f4f6"; e.currentTarget.style.color = "#374151"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "#6b7280"; }}
+            >
+              <Square size={15} />
+            </button>
+            {/* Separador */}
+            <div style={{ width: 1, height: 20, background: "#e5e7eb", margin: "0 2px" }} />
             {/* Inserir imagem */}
             <button
               onClick={() => imageInputRef.current?.click()}
@@ -790,31 +978,35 @@ function FunilBuilderInner() {
             />
           </div>
 
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onConnectEnd={onConnectEnd}
-            onInit={setRfInstance}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            onNodeClick={onNodeClick}
-            onPaneClick={onPaneClick}
-            onNodeDragStop={snapshot}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            connectionMode="loose"
-            selectionOnDrag={tool === "select"}
-            panOnDrag={tool === "pan" ? true : [1, 2]}
-            fitView
-            deleteKeyCode="Delete"
-          >
-            <Background variant={BackgroundVariant.Lines} gap={24} lineWidth={1} color="#e5e7eb" />
-            <Controls />
-            <MiniMap nodeStrokeWidth={3} zoomable pannable />
-          </ReactFlow>
+          <NodeActionsContext.Provider value={nodeActions}>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onConnectEnd={onConnectEnd}
+              onInit={setRfInstance}
+              onDrop={onDrop}
+              onDragOver={onDragOver}
+              onNodeClick={onNodeClick}
+              onPaneClick={onPaneClick}
+              onNodeDragStop={snapshot}
+              nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              connectionMode="loose"
+              selectionOnDrag={tool === "select"}
+              panOnDrag={tool === "pan" ? true : [1, 2]}
+              snapToGrid={snapGrid}
+              snapGrid={[24, 24]}
+              fitView
+              deleteKeyCode="Delete"
+            >
+              <Background variant={BackgroundVariant.Lines} gap={24} lineWidth={1} color="#e5e7eb" />
+              <Controls />
+              <MiniMap nodeStrokeWidth={3} zoomable pannable />
+            </ReactFlow>
+          </NodeActionsContext.Provider>
         </div>
 
         {selectedNode && (
@@ -937,6 +1129,51 @@ function FunilBuilderInner() {
           onAdd={handleQuickAdd}
           onClose={() => setQuickAdd(null)}
         />
+      )}
+
+      {/* Modal salvar template */}
+      {templateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setTemplateModal(false)}>
+          <div className="bg-card border border-border rounded-xl shadow-2xl p-6 w-96" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-semibold mb-4">Salvar como Template</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">Nome do template</label>
+                <input
+                  autoFocus
+                  type="text"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="Ex: Funil de Lançamento"
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">Descrição (opcional)</label>
+                <textarea
+                  value={templateDesc}
+                  onChange={(e) => setTemplateDesc(e.target.value)}
+                  placeholder="Descreva brevemente o template..."
+                  rows={3}
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5 justify-end">
+              <button onClick={() => setTemplateModal(false)} className="text-sm px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={saveAsTemplate}
+                disabled={!templateName.trim() || templateSaving}
+                className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 transition-colors flex items-center gap-1.5"
+              >
+                {templateSaving && <Loader2 size={13} className="animate-spin" />}
+                Salvar template
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

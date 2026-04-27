@@ -260,6 +260,12 @@ class FunnelUpdate(BaseModel):
     flow_data: Optional[dict] = None
     strategy: Optional[str] = Field(None, max_length=50000)
 
+class FunnelTemplateCreate(BaseModel):
+    name: str = Field(..., max_length=255)
+    description: str = Field("", max_length=500)
+    flow_data: dict = {}
+    thumbnail: Optional[str] = None
+
 class CustomIconCreate(BaseModel):
     name: str = Field(..., max_length=100)
     image_b64: str
@@ -3420,6 +3426,8 @@ async def update_funnel(funnel_id: str, body: FunnelUpdate, current_user: dict =
         update["name"] = body.name
     if body.flow_data is not None:
         update["flow_data"] = body.flow_data
+    if body.strategy is not None:
+        update["strategy"] = body.strategy
     await db.funnels.update_one({"funnel_id": funnel_id, "org_id": current_user["org_id"]}, {"$set": update})
     return {**{k: v for k, v in doc.items() if k != "_id"}, **update}
 
@@ -3429,6 +3437,36 @@ async def delete_funnel(funnel_id: str, current_user: dict = Depends(get_current
     result = await db.funnels.delete_one({"funnel_id": funnel_id, "org_id": current_user["org_id"]})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Funil não encontrado")
+
+
+# ─── Funnel Templates ─────────────────────────────────────────────────────────
+
+@api_router.get("/funnel-templates")
+async def list_funnel_templates(current_user: dict = Depends(get_current_user)):
+    cursor = db.funnel_templates.find({"org_id": current_user["org_id"]}, {"_id": 0}).sort("created_at", -1)
+    return await cursor.to_list(200)
+
+@api_router.post("/funnel-templates", status_code=201)
+async def create_funnel_template(body: FunnelTemplateCreate, current_user: dict = Depends(get_current_user)):
+    template_id = f"tmpl_{uuid.uuid4().hex[:10]}"
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "template_id": template_id,
+        "org_id": current_user["org_id"],
+        "name": body.name,
+        "description": body.description,
+        "flow_data": body.flow_data,
+        "thumbnail": body.thumbnail,
+        "created_at": now,
+    }
+    await db.funnel_templates.insert_one(doc)
+    return {"template_id": template_id}
+
+@api_router.delete("/funnel-templates/{template_id}", status_code=204)
+async def delete_funnel_template(template_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.funnel_templates.delete_one({"template_id": template_id, "org_id": current_user["org_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Template não encontrado")
 
 
 # ─── Custom Icons (per user) ─────────────────────────────────────────────────

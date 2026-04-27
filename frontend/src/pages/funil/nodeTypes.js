@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Handle, Position, NodeResizer } from "@xyflow/react";
+import { Handle, Position, NodeResizer, NodeToolbar } from "@xyflow/react";
 import RichTextNode from "./RichTextNode";
+import { useNodeActions } from "./NodeActionsContext";
+import { Copy, ArrowUp, ArrowDown, Lock, Trash2 } from "lucide-react";
 import { FaFacebookF, FaInstagram, FaYoutube, FaWhatsapp, FaLinkedinIn, FaPhone, FaDesktop, FaShoppingCart, FaMousePointer, FaPencilAlt, FaFont, FaCreditCard, FaArrowCircleUp, FaArrowCircleDown, FaHeart, FaPlayCircle, FaCalendarAlt, FaRobot, FaTag, FaLock, FaEnvelope, FaUserFriends } from "react-icons/fa";
 import { SiTiktok, SiGmail, SiGoogleads } from "react-icons/si";
 import { MdDynamicForm, MdWebhook, MdSms } from "react-icons/md";
@@ -47,13 +49,45 @@ export const NODE_DEFS = [
 
 const handleStyle = { background: "#94a3b8", width: 10, height: 10, border: "2px solid #fff" };
 
+// ─── Toolbar contextual flutuante ─────────────────────────────────────────────
+
+function ContextToolbar({ id, selected, data }) {
+  const actions = useNodeActions();
+  if (!actions) return null;
+  const btnStyle = (danger, active) => ({
+    width: 26, height: 26, borderRadius: 6, border: "none", cursor: "pointer",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    background: active ? "#dbeafe" : "transparent",
+    color: danger ? "#ef4444" : active ? "#3b82f6" : "#374151",
+    transition: "background 0.12s",
+  });
+  return (
+    <NodeToolbar isVisible={selected} position={Position.Top} offset={6}>
+      <div style={{
+        display: "flex", gap: 2, alignItems: "center",
+        background: "#fff", border: "1px solid #e5e7eb",
+        borderRadius: 8, boxShadow: "0 2px 10px rgba(0,0,0,0.12)",
+        padding: "2px 4px",
+      }}>
+        <button style={btnStyle(false, false)} title="Duplicar"        onClick={() => actions.duplicateNode(id)}><Copy size={13} /></button>
+        <button style={btnStyle(false, false)} title="Trazer à frente"  onClick={() => actions.bringToFront(id)}><ArrowUp size={13} /></button>
+        <button style={btnStyle(false, false)} title="Enviar atrás"     onClick={() => actions.sendToBack(id)}><ArrowDown size={13} /></button>
+        <button style={btnStyle(false, data?.locked)} title={data?.locked ? "Desbloquear" : "Bloquear posição"} onClick={() => actions.lockNode(id)}><Lock size={13} /></button>
+        <div style={{ width: 1, height: 16, background: "#e5e7eb", margin: "0 2px" }} />
+        <button style={btnStyle(true, false)} title="Excluir"           onClick={() => actions.deleteNode(id)}><Trash2 size={13} /></button>
+      </div>
+    </NodeToolbar>
+  );
+}
+
 // ─── Nó circular base ─────────────────────────────────────────────────────────
 
-function CircleNode({ data, Icon, bg, defaultLabel }) {
+function CircleNode({ data, Icon, bg, defaultLabel, selected, id }) {
   const hasImage = Boolean(data.imageB64);
 
   return (
     <div style={{ position: "relative", display: "inline-flex", flexDirection: "column", alignItems: "center", minWidth: 80, paddingTop: 6, paddingBottom: 6 }}>
+      <ContextToolbar id={id} selected={selected} data={data} />
       {/* Handle topo */}
       <Handle
         type="source"
@@ -132,7 +166,7 @@ function CircleNode({ data, Icon, bg, defaultLabel }) {
 
 // ─── Nó especial: Landing Page com preview de site ────────────────────────────
 
-function LandingPageNode({ data }) {
+function LandingPageNode({ data, selected, id }) {
   const url = data.url || "";
   const [screenshotUrl, setScreenshotUrl] = useState("");
 
@@ -151,6 +185,7 @@ function LandingPageNode({ data }) {
 
   return (
     <div style={{ position: "relative", width: 200 }}>
+      <ContextToolbar id={id} selected={selected} data={data} />
       {/* 4 handles */}
       <Handle type="source" position={Position.Top}    id="top"    style={{ ...handleStyle }} />
       <Handle type="source" position={Position.Bottom} id="bottom" style={{ ...handleStyle }} />
@@ -287,15 +322,57 @@ function ImageNode({ data, selected }) {
 
 // TextNode is now RichTextNode (imported above)
 
+// ─── Nó Frame / Grupo ─────────────────────────────────────────────────────────
+
+function FrameNode({ data, selected }) {
+  const border = data.borderColor || "#6366f1";
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        background: data.bgColor || "rgba(99,102,241,0.05)",
+        border: `2px dashed ${border}`,
+        borderRadius: 12,
+        position: "relative",
+        pointerEvents: "all",
+      }}
+    >
+      <NodeResizer
+        isVisible={selected}
+        minWidth={200}
+        minHeight={150}
+        lineStyle={{ border: `2px solid ${border}` }}
+        handleStyle={{ width: 8, height: 8, borderRadius: 2, background: "#fff", border: `2px solid ${border}` }}
+      />
+      <p
+        style={{
+          position: "absolute",
+          top: 8,
+          left: 12,
+          margin: 0,
+          fontSize: 11,
+          fontWeight: 600,
+          color: border,
+          userSelect: "none",
+          pointerEvents: "none",
+        }}
+      >
+        {data.label || "Grupo"}
+      </p>
+    </div>
+  );
+}
+
 // ─── Geração automática de nodeTypes ─────────────────────────────────────────
 
-const SPECIAL_TYPES = new Set(["landing", "text", "image"]);
+const SPECIAL_TYPES = new Set(["landing", "text", "image", "frame"]);
 
 const genericNodeTypes = Object.fromEntries(
   NODE_DEFS.filter((d) => !SPECIAL_TYPES.has(d.type)).map(({ type, label, Icon, bg }) => [
     type,
-    function GeneratedNode({ data }) {
-      return <CircleNode data={data} Icon={Icon} bg={bg} defaultLabel={label} />;
+    function GeneratedNode({ data, selected, id }) {
+      return <CircleNode data={data} Icon={Icon} bg={bg} defaultLabel={label} selected={selected} id={id} />;
     },
   ])
 );
@@ -304,5 +381,6 @@ export const nodeTypes = {
   landing: LandingPageNode,
   text: RichTextNode,
   image: ImageNode,
+  frame: FrameNode,
   ...genericNodeTypes,
 };
