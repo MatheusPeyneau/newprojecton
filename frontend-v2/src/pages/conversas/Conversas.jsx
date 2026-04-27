@@ -293,7 +293,7 @@ export default function Conversas() {
               <div>
                 <p className="text-sm font-semibold">{selectedChat.name}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  {selectedChat.id.replace('@c.us', '')}
+                  +{selectedChat.id.replace('@s.whatsapp.net', '').replace('@c.us', '')}
                 </p>
               </div>
             </div>
