@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
 import * as I from '../shared/Icons';
 import { clearToken } from '../../lib/auth';
 
@@ -7,6 +8,17 @@ export default function Topbar({ user, theme, onToggleTheme, notificationCount =
   const u = user || { full_name: 'Usuário', role: '', email: '' };
   const initial = (u.full_name || u.email || 'U')[0].toUpperCase();
   const firstName = (u.full_name || '').split(' ')[0] || 'Usuário';
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClick(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [menuOpen]);
 
   function handleLogout() {
     clearToken();
@@ -57,8 +69,11 @@ export default function Topbar({ user, theme, onToggleTheme, notificationCount =
           )}
         </button>
 
-        <div className="group relative ml-1">
-          <button className="flex items-center gap-2.5 rounded-xl border border-zinc-200 bg-white py-1 pl-1 pr-2.5 dark:border-white/[0.06] dark:bg-white/[0.02]">
+        <div className="relative ml-1" ref={menuRef}>
+          <button
+            onClick={() => setMenuOpen(v => !v)}
+            className="flex items-center gap-2.5 rounded-xl border border-zinc-200 bg-white py-1 pl-1 pr-2.5 dark:border-white/[0.06] dark:bg-white/[0.02]"
+          >
             <div className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 text-[11.5px] font-semibold text-white">
               {initial}
             </div>
@@ -68,15 +83,17 @@ export default function Topbar({ user, theme, onToggleTheme, notificationCount =
             </div>
             <I.ChevronDown size={14} className="text-zinc-400" />
           </button>
-          <div className="absolute right-0 top-full mt-1 hidden group-hover:block z-50 w-44 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-white/[0.08] dark:bg-[#16161a]">
-            <button
-              onClick={handleLogout}
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-[13px] text-zinc-700 hover:bg-zinc-50 rounded-xl dark:text-zinc-300 dark:hover:bg-white/[0.04]"
-            >
-              <I.LogOut size={14} />
-              Sair
-            </button>
-          </div>
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-1 z-50 w-44 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-white/[0.08] dark:bg-[#16161a]">
+              <button
+                onClick={handleLogout}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-[13px] text-zinc-700 hover:bg-zinc-50 rounded-xl dark:text-zinc-300 dark:hover:bg-white/[0.04]"
+              >
+                <I.LogOut size={14} />
+                Sair
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>
