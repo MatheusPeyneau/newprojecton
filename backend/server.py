@@ -21,6 +21,27 @@ import json as json_module
 import secrets
 import hmac
 import hashlib
+import base64
+import io
+
+# Google APIs (Drive + Calendar)
+try:
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaIoBaseUpload
+    GOOGLE_LIBS_OK = True
+except ImportError:
+    GOOGLE_LIBS_OK = False
+
+# PDF generation
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.units import cm
+    REPORTLAB_OK = True
+except ImportError:
+    REPORTLAB_OK = False
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -965,6 +986,351 @@ async def call_n8n_with_retry(url: str, payload: dict, retries: int = 3, timeout
     )
 
 
+# ============= INTEGRATIONS SETTINGS MODELS =============
+
+class AsaasSettings(BaseModel):
+    api_key: str = ""
+    sandbox: bool = True
+    enabled: bool = False
+
+class GoogleIntegrationSettings(BaseModel):
+    service_account_json: str = ""   # JSON string da service account
+    drive_root_folder_id: str = ""   # ID da pasta raiz no Drive
+    calendar_id: str = "primary"
+    drive_enabled: bool = False
+    calendar_enabled: bool = False
+
+class ContractTemplateSettings(BaseModel):
+    template: str = ""
+    enabled: bool = False
+
+
+# ============= INTEGRATION HELPER FUNCTIONS =============
+
+async def _get_asaas_settings() -> dict:
+    s = await db.settings.find_one({"setting_id": "asaas"}, {"_id": 0})
+    return s or {}
+
+async def _get_google_settings() -> dict:
+    s = await db.settings.find_one({"setting_id": "google_integration"}, {"_id": 0})
+    return s or {}
+
+async def _get_contract_template() -> str:
+    s = await db.settings.find_one({"setting_id": "contract_template"}, {"_id": 0})
+    return s.get("template", "") if s else ""
+
+def _build_google_creds(service_account_json: str, scopes: list):
+    """Build Google credentials from service account JSON string."""
+    if not GOOGLE_LIBS_OK or not service_account_json.strip():
+        return None
+    try:
+        info = json_module.loads(service_account_json)
+        return service_account.Credentials.from_service_account_info(info, scopes=scopes)
+    except Exception as exc:
+        logger.error(f"Google credentials error: {exc}")
+        return None
+
+
+async def asaas_create_client_and_charge(client_doc: dict) -> dict:
+    """Create customer + payment in Asaas. Returns dict with asaas_customer_id and payment_link."""
+    result = {"asaas_customer_id": None, "asaas_payment_id": None, "asaas_payment_link": None}
+    try:
+        settings = await _get_asaas_settings()
+        if not settings.get("enabled") or not settings.get("api_key"):
+            return result
+
+        base_url = "https://sandbox.asaas.com/api/v3" if settings.get("sandbox", True) else "https://api.asaas.com/v3"
+        headers = {"access_token": settings["api_key"], "Content-Type": "application/json"}
+
+        async with httpx.AsyncClient(timeout=20.0) as http:
+            # 1. Criar cliente
+            customer_payload = {
+                "name": client_doc.get("name", ""),
+                "email": client_doc.get("email") or "",
+                "mobilePhone": (client_doc.get("phone") or "").replace(" ", "").replace("-", ""),
+                "cpfCnpj": (client_doc.get("cpf_cnpj") or "").replace(".", "").replace("/", "").replace("-", ""),
+                "externalReference": client_doc.get("client_id", ""),
+            }
+            resp = await http.post(f"{base_url}/customers", json=customer_payload, headers=headers)
+            if resp.status_code not in (200, 201):
+                logger.error(f"Asaas customer creation failed: {resp.text}")
+                return result
+            customer = resp.json()
+            result["asaas_customer_id"] = customer.get("id")
+
+            # 2. Criar cobrança
+            if client_doc.get("monthly_value", 0) > 0 and result["asaas_customer_id"]:
+                due = client_doc.get("due_date")
+                if not due:
+                    now = datetime.now(timezone.utc)
+                    m = now.month % 12 + 1
+                    y = now.year + (1 if now.month == 12 else 0)
+                    due = f"{y}-{m:02d}-01"
+
+                billing_type = client_doc.get("billing_type", "BOLETO").upper()
+                if billing_type not in ("BOLETO", "PIX", "CREDIT_CARD"):
+                    billing_type = "BOLETO"
+
+                charge_payload = {
+                    "customer": result["asaas_customer_id"],
+                    "billingType": billing_type,
+                    "value": float(client_doc.get("monthly_value", 0)),
+                    "dueDate": due,
+                    "description": f"Mensalidade — {client_doc.get('name', '')}",
+                    "externalReference": client_doc.get("client_id", ""),
+                }
+                resp2 = await http.post(f"{base_url}/payments", json=charge_payload, headers=headers)
+                if resp2.status_code in (200, 201):
+                    payment = resp2.json()
+                    result["asaas_payment_id"] = payment.get("id")
+                    result["asaas_payment_link"] = payment.get("bankSlipUrl") or payment.get("invoiceUrl")
+                else:
+                    logger.error(f"Asaas payment creation failed: {resp2.text}")
+
+        logger.info(f"Asaas: cliente {result['asaas_customer_id']} criado, cobrança {result['asaas_payment_id']}")
+    except Exception as exc:
+        logger.error(f"Asaas integration error: {exc}")
+    return result
+
+
+async def drive_create_client_folder(client_name: str, client_id: str) -> Optional[str]:
+    """Create a folder in Google Drive for the client. Returns folder_id or None."""
+    try:
+        settings = await _get_google_settings()
+        if not settings.get("drive_enabled") or not settings.get("service_account_json"):
+            return None
+
+        creds = _build_google_creds(
+            settings["service_account_json"],
+            ["https://www.googleapis.com/auth/drive"]
+        )
+        if not creds:
+            return None
+
+        # Run in thread pool to avoid blocking event loop
+        import asyncio
+        loop = asyncio.get_event_loop()
+
+        def _create_folder():
+            service = build("drive", "v3", credentials=creds, cache_discovery=False)
+            folder_meta = {
+                "name": f"{client_name} [{client_id}]",
+                "mimeType": "application/vnd.google-apps.folder",
+            }
+            root = settings.get("drive_root_folder_id", "")
+            if root:
+                folder_meta["parents"] = [root]
+            folder = service.files().create(body=folder_meta, fields="id").execute()
+            return folder.get("id")
+
+        folder_id = await loop.run_in_executor(None, _create_folder)
+        logger.info(f"Drive: pasta criada {folder_id} para {client_name}")
+        return folder_id
+    except Exception as exc:
+        logger.error(f"Drive folder creation error: {exc}")
+        return None
+
+
+async def drive_upload_file(folder_id: str, filename: str, content_bytes: bytes, mime_type: str = "application/pdf") -> Optional[str]:
+    """Upload a file to a Drive folder. Returns the file URL or None."""
+    try:
+        settings = await _get_google_settings()
+        if not settings.get("service_account_json"):
+            return None
+        creds = _build_google_creds(
+            settings["service_account_json"],
+            ["https://www.googleapis.com/auth/drive"]
+        )
+        if not creds:
+            return None
+
+        import asyncio
+        loop = asyncio.get_event_loop()
+
+        def _upload():
+            service = build("drive", "v3", credentials=creds, cache_discovery=False)
+            file_meta = {"name": filename, "parents": [folder_id]}
+            media = MediaIoBaseUpload(io.BytesIO(content_bytes), mimetype=mime_type, resumable=False)
+            uploaded = service.files().create(body=file_meta, media_body=media, fields="id,webViewLink").execute()
+            return uploaded.get("webViewLink")
+
+        url = await loop.run_in_executor(None, _upload)
+        logger.info(f"Drive: arquivo {filename} enviado → {url}")
+        return url
+    except Exception as exc:
+        logger.error(f"Drive upload error: {exc}")
+        return None
+
+
+def generate_contract_pdf(client_doc: dict, template: str) -> bytes:
+    """Generate a contract PDF from template. Returns PDF bytes."""
+    if not REPORTLAB_OK:
+        return b""
+    try:
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=A4,
+                                rightMargin=2*cm, leftMargin=2*cm,
+                                topMargin=2*cm, bottomMargin=2*cm)
+        styles = getSampleStyleSheet()
+        normal = styles["Normal"]
+        normal.fontSize = 11
+        normal.leading = 16
+
+        # Replace placeholders
+        replacements = {
+            "{{nome}}": client_doc.get("name", ""),
+            "{{email}}": client_doc.get("email", ""),
+            "{{telefone}}": client_doc.get("phone", ""),
+            "{{cpf_cnpj}}": client_doc.get("cpf_cnpj", ""),
+            "{{valor}}": f"R$ {float(client_doc.get('monthly_value', 0)):.2f}".replace(".", ","),
+            "{{data}}": datetime.now(timezone.utc).strftime("%d/%m/%Y"),
+            "{{empresa}}": client_doc.get("company", ""),
+        }
+        text = template
+        for k, v in replacements.items():
+            text = text.replace(k, v)
+
+        story = []
+        for line in text.split("\n"):
+            if line.strip():
+                story.append(Paragraph(line, normal))
+                story.append(Spacer(1, 0.2*cm))
+            else:
+                story.append(Spacer(1, 0.4*cm))
+
+        doc.build(story)
+        return buf.getvalue()
+    except Exception as exc:
+        logger.error(f"PDF generation error: {exc}")
+        return b""
+
+
+async def calendar_create_event(payload: dict) -> Optional[str]:
+    """Create a Google Calendar event. Returns event link or None."""
+    try:
+        settings = await _get_google_settings()
+        if not settings.get("calendar_enabled") or not settings.get("service_account_json"):
+            return None
+
+        creds = _build_google_creds(
+            settings["service_account_json"],
+            ["https://www.googleapis.com/auth/calendar"]
+        )
+        if not creds:
+            return None
+
+        calendar_id = settings.get("calendar_id", "primary")
+        meeting_date = payload.get("meetingDate", "")
+        start_time = payload.get("startTime", "09:00")
+        end_time = payload.get("endTime", "10:00")
+
+        import asyncio
+        loop = asyncio.get_event_loop()
+
+        def _create_event():
+            service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+            event = {
+                "summary": payload.get("meetingTitle", "Reunião"),
+                "description": payload.get("notes", ""),
+                "start": {"dateTime": f"{meeting_date}T{start_time}:00", "timeZone": "America/Sao_Paulo"},
+                "end":   {"dateTime": f"{meeting_date}T{end_time}:00",   "timeZone": "America/Sao_Paulo"},
+            }
+            email = payload.get("email", "")
+            if email:
+                event["attendees"] = [{"email": email}]
+            result = service.events().insert(calendarId=calendar_id, body=event, sendUpdates="all").execute()
+            return result.get("htmlLink")
+
+        link = await loop.run_in_executor(None, _create_event)
+        logger.info(f"Calendar: evento criado → {link}")
+        return link
+    except Exception as exc:
+        logger.error(f"Calendar event creation error: {exc}")
+        return None
+
+
+# ============= INTEGRATION SETTINGS ENDPOINTS =============
+
+@api_router.get("/settings/asaas")
+async def get_asaas_settings(current_user: dict = Depends(get_current_user)):
+    s = await _get_asaas_settings()
+    masked_key = ""
+    if s.get("api_key"):
+        masked_key = "•" * (len(s["api_key"]) - 4) + s["api_key"][-4:]
+    return {"api_key_masked": masked_key, "sandbox": s.get("sandbox", True), "enabled": s.get("enabled", False)}
+
+@api_router.put("/settings/asaas")
+async def save_asaas_settings(body: AsaasSettings, current_user: dict = Depends(get_current_user)):
+    update: dict = {"setting_id": "asaas", "sandbox": body.sandbox, "enabled": body.enabled,
+                    "updated_at": datetime.now(timezone.utc).isoformat()}
+    if body.api_key and not body.api_key.startswith("•"):
+        update["api_key"] = body.api_key
+    await db.settings.update_one({"setting_id": "asaas"}, {"$set": update}, upsert=True)
+    return {"message": "Configuração Asaas salva"}
+
+@api_router.post("/settings/asaas/test")
+async def test_asaas_connection(current_user: dict = Depends(get_current_user)):
+    s = await _get_asaas_settings()
+    if not s.get("api_key"):
+        raise HTTPException(status_code=400, detail="API key do Asaas não configurada")
+    base_url = "https://sandbox.asaas.com/api/v3" if s.get("sandbox", True) else "https://api.asaas.com/v3"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http:
+            resp = await http.get(f"{base_url}/customers?limit=1", headers={"access_token": s["api_key"]})
+        if resp.status_code == 200:
+            return {"success": True, "message": "Conexão com Asaas OK"}
+        raise HTTPException(status_code=400, detail=f"Asaas retornou {resp.status_code}: {resp.text[:200]}")
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=400, detail=f"Erro de conexão: {exc}")
+
+@api_router.get("/settings/google-integration")
+async def get_google_integration_settings(current_user: dict = Depends(get_current_user)):
+    s = await _get_google_settings()
+    has_sa = bool(s.get("service_account_json"))
+    return {
+        "has_service_account": has_sa,
+        "drive_root_folder_id": s.get("drive_root_folder_id", ""),
+        "calendar_id": s.get("calendar_id", "primary"),
+        "drive_enabled": s.get("drive_enabled", False),
+        "calendar_enabled": s.get("calendar_enabled", False),
+    }
+
+@api_router.put("/settings/google-integration")
+async def save_google_integration_settings(body: GoogleIntegrationSettings, current_user: dict = Depends(get_current_user)):
+    update: dict = {
+        "setting_id": "google_integration",
+        "drive_root_folder_id": body.drive_root_folder_id,
+        "calendar_id": body.calendar_id or "primary",
+        "drive_enabled": body.drive_enabled,
+        "calendar_enabled": body.calendar_enabled,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if body.service_account_json.strip():
+        # Validate JSON
+        try:
+            json_module.loads(body.service_account_json)
+            update["service_account_json"] = body.service_account_json
+        except Exception:
+            raise HTTPException(status_code=400, detail="JSON da Service Account inválido")
+    await db.settings.update_one({"setting_id": "google_integration"}, {"$set": update}, upsert=True)
+    return {"message": "Configuração Google salva"}
+
+@api_router.get("/settings/contract-template")
+async def get_contract_template(current_user: dict = Depends(get_current_user)):
+    s = await db.settings.find_one({"setting_id": "contract_template"}, {"_id": 0})
+    return {"template": s.get("template", "") if s else "", "enabled": s.get("enabled", False) if s else False}
+
+@api_router.put("/settings/contract-template")
+async def save_contract_template(body: ContractTemplateSettings, current_user: dict = Depends(get_current_user)):
+    await db.settings.update_one(
+        {"setting_id": "contract_template"},
+        {"$set": {"setting_id": "contract_template", "template": body.template,
+                  "enabled": body.enabled, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"message": "Template salvo"}
+
+
 # ============= CLIENTS ENDPOINTS =============
 
 @api_router.get("/clients")
@@ -1000,8 +1366,54 @@ async def create_client(body: ClientCreate, current_user: dict = Depends(get_cur
         "updated_at": now,
     })
     result = {k: v for k, v in client_doc.items() if k != "_id"}
-    await send_n8n_webhook(client_doc)
+
+    # Fire integrations in background (never block client creation)
+    asyncio.create_task(_run_client_integrations(client_doc))
+
     return result
+
+
+async def _run_client_integrations(client_doc: dict):
+    """Run all post-creation integrations asynchronously."""
+    client_id = client_doc["client_id"]
+    updates: dict = {}
+
+    # 1. Asaas
+    asaas = await asaas_create_client_and_charge(client_doc)
+    if asaas.get("asaas_customer_id"):
+        updates["asaas_customer_id"] = asaas["asaas_customer_id"]
+    if asaas.get("asaas_payment_id"):
+        updates["asaas_payment_id"] = asaas["asaas_payment_id"]
+    if asaas.get("asaas_payment_link"):
+        updates["asaas_payment_link"] = asaas["asaas_payment_link"]
+
+    # 2. Google Drive — criar pasta
+    folder_id = await drive_create_client_folder(client_doc.get("name", ""), client_id)
+    if folder_id:
+        updates["drive_folder_id"] = folder_id
+
+        # 3. Contrato PDF — gerar e subir na pasta
+        template = await _get_contract_template()
+        ct_settings = await db.settings.find_one({"setting_id": "contract_template"}, {"_id": 0})
+        if template and ct_settings and ct_settings.get("enabled"):
+            pdf_bytes = generate_contract_pdf(client_doc, template)
+            if pdf_bytes:
+                contract_url = await drive_upload_file(
+                    folder_id,
+                    f"Contrato - {client_doc.get('name', client_id)}.pdf",
+                    pdf_bytes,
+                    "application/pdf",
+                )
+                if contract_url:
+                    updates["contract_drive_url"] = contract_url
+
+    # 4. N8N webhook (mantém compatibilidade se configurado)
+    await send_n8n_webhook(client_doc)
+
+    # Persist integration fields
+    if updates:
+        updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await db.clients.update_one({"client_id": client_id}, {"$set": updates})
 
 
 @api_router.get("/clients/{client_id}")
@@ -1028,6 +1440,64 @@ async def delete_client(client_id: str, current_user: dict = Depends(get_current
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
     return {"message": "Cliente removido com sucesso"}
+
+
+class ManualChargeRequest(BaseModel):
+    billing_type: str = "PIX"
+    value: Optional[float] = None
+    due_date: Optional[str] = None
+    description: Optional[str] = None
+
+@api_router.post("/clients/{client_id}/charge")
+async def create_manual_charge(client_id: str, body: ManualChargeRequest, current_user: dict = Depends(get_current_user)):
+    """Generate a manual charge for an existing client in Asaas."""
+    client = await db.clients.find_one({"client_id": client_id, "org_id": current_user["org_id"]}, {"_id": 0})
+    if not client:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado")
+
+    asaas_settings = await _get_asaas_settings()
+    if not asaas_settings.get("enabled") or not asaas_settings.get("api_key"):
+        raise HTTPException(status_code=400, detail="Asaas não configurado")
+
+    customer_id = client.get("asaas_customer_id")
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="Cliente não possui ID Asaas. Crie uma cobrança pelo Asaas.")
+
+    base_url = "https://sandbox.asaas.com/api/v3" if asaas_settings.get("sandbox", True) else "https://api.asaas.com/v3"
+    headers = {"access_token": asaas_settings["api_key"], "Content-Type": "application/json"}
+
+    due = body.due_date
+    if not due:
+        now = datetime.now(timezone.utc)
+        m = now.month % 12 + 1
+        y = now.year + (1 if now.month == 12 else 0)
+        due = f"{y}-{m:02d}-01"
+
+    billing_type = body.billing_type.upper()
+    if billing_type not in ("BOLETO", "PIX", "CREDIT_CARD"):
+        billing_type = "PIX"
+
+    charge_payload = {
+        "customer": customer_id,
+        "billingType": billing_type,
+        "value": body.value or float(client.get("monthly_value", 0)),
+        "dueDate": due,
+        "description": body.description or f"Cobrança avulsa — {client.get('name', '')}",
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as http:
+        resp = await http.post(f"{base_url}/payments", json=charge_payload, headers=headers)
+        if resp.status_code not in (200, 201):
+            raise HTTPException(status_code=400, detail=f"Asaas: {resp.text[:300]}")
+        payment = resp.json()
+
+    return {
+        "success": True,
+        "payment_id": payment.get("id"),
+        "payment_link": payment.get("bankSlipUrl") or payment.get("invoiceUrl"),
+        "due_date": due,
+        "value": charge_payload["value"],
+    }
 
 
 # ============= WEBHOOK SETTINGS ENDPOINTS =============
@@ -3107,15 +3577,25 @@ class MeetingWebhookSettings(BaseModel):
 async def forward_meeting_schedule(body: MeetingSchedulePayload):
     """
     Public endpoint — frontend calls this after confirming a meeting.
-    Forwards the meeting payload to the N8N URL configured in settings.
+    Creates event in Google Calendar directly (if configured) and/or forwards to N8N.
     """
+    payload = body.model_dump()
+    payload["scheduledAt"] = payload.get("scheduledAt") or datetime.now(timezone.utc).isoformat()
+
+    calendar_link = None
+
+    # 1. Google Calendar direto
+    cal_link = await calendar_create_event(payload)
+    if cal_link:
+        calendar_link = cal_link
+        logger.info(f"Meeting: evento criado no Google Calendar → {cal_link}")
+
+    # 2. N8N fallback (mantém compatibilidade)
     settings = await db.settings.find_one({"setting_id": "webhook_meeting"}, {"_id": 0})
     webhook_url = settings.get("webhook_url", "") if settings else ""
     enabled = settings.get("enabled", True) if settings else True
 
     if webhook_url and enabled:
-        payload = body.model_dump()
-        payload["scheduledAt"] = payload.get("scheduledAt") or datetime.now(timezone.utc).isoformat()
         try:
             async with httpx.AsyncClient(timeout=15.0) as http_client:
                 await http_client.post(webhook_url, json=payload,
@@ -3123,7 +3603,7 @@ async def forward_meeting_schedule(body: MeetingSchedulePayload):
         except Exception as exc:
             logger.warning(f"Meeting webhook forward failed: {exc}")
 
-    return {"success": True, "received": True}
+    return {"success": True, "received": True, "calendar_link": calendar_link}
 
 
 @api_router.get("/settings/meeting-webhook")
