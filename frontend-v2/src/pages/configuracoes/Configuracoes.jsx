@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Settings, Sun, Moon, Globe, Bot, Zap, FlaskConical, CheckCircle2, XCircle, Loader2, Sparkles, Key, Eye, EyeOff, Save, MessageCircle, Copy, CheckCheck, CalendarClock, Share2, Globe2, Users, UserPlus, Trash2, Crown, User, ChevronDown, ChevronRight, Shield } from "lucide-react";
+import { Settings, Sun, Moon, Globe, Bot, Zap, FlaskConical, CheckCircle2, XCircle, Loader2, Sparkles, Key, Eye, EyeOff, Save, MessageCircle, Copy, CheckCheck, CalendarClock, Share2, Globe2, Users, UserPlus, Trash2, Crown, User, ChevronDown, ChevronRight, Shield, CreditCard, HardDrive, FileText } from "lucide-react";
 
 const API = `${import.meta.env.VITE_BACKEND_URL}/api`;
 function getAuthHeader() {
@@ -796,6 +796,193 @@ export function InstagramApiSection() {
   );
 }
 
+// ─── Asaas Section ────────────────────────────────────────────────────────────
+function AsaasSection() {
+  const [apiKey, setApiKey] = useState("");
+  const [sandbox, setSandbox] = useState(true);
+  const [enabled, setEnabled] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [maskedKey, setMaskedKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  useEffect(() => {
+    axios.get(`${API}/settings/asaas`, { headers: getAuthHeader() })
+      .then(r => {
+        setMaskedKey(r.data.api_key_masked || "");
+        setSandbox(r.data.sandbox ?? true);
+        setEnabled(r.data.enabled ?? false);
+      }).catch(() => {});
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const body = { sandbox, enabled };
+      if (apiKey) body.api_key = apiKey;
+      await axios.put(`${API}/settings/asaas`, body, { headers: getAuthHeader() });
+      if (apiKey) { setMaskedKey(`${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`); setApiKey(""); }
+      toast.success("Configurações Asaas salvas!");
+    } catch (err) { toast.error(err.response?.data?.detail || "Erro ao salvar"); }
+    setSaving(false);
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      const res = await axios.post(`${API}/settings/asaas/test`, {}, { headers: getAuthHeader() });
+      toast.success(res.data.message || "Conexão OK!");
+    } catch (err) { toast.error(err.response?.data?.detail || "Falha na conexão"); }
+    setTesting(false);
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-5 mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold flex items-center gap-2"><CreditCard size={15} />Asaas — Cobrança</h3>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Switch checked={enabled} onCheckedChange={setEnabled} />
+          <span className="text-xs text-muted-foreground">{enabled ? "Ativo" : "Inativo"}</span>
+        </label>
+      </div>
+      <p className="text-xs text-muted-foreground mb-3">Cria cliente e cobrança no Asaas automaticamente ao cadastrar um novo cliente.</p>
+      <div className="mb-3">
+        <Label className="text-xs mb-1 block">API Key do Asaas</Label>
+        {maskedKey && !showKey ? (
+          <div className="flex gap-2 items-center">
+            <Input value={maskedKey} readOnly className="text-xs font-mono" />
+            <button onClick={() => setShowKey(true)} className="text-xs text-primary underline whitespace-nowrap">alterar</button>
+          </div>
+        ) : (
+          <Input value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="$aact_..." className="text-xs font-mono" />
+        )}
+      </div>
+      <div className="flex items-center gap-3 mb-4">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Switch checked={sandbox} onCheckedChange={setSandbox} />
+          <span className="text-xs text-muted-foreground">Modo sandbox (testes)</span>
+        </label>
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={handleSave} disabled={saving}>{saving && <Loader2 size={13} className="animate-spin mr-1" />}Salvar</Button>
+        <Button size="sm" variant="outline" onClick={handleTest} disabled={testing}>{testing && <Loader2 size={13} className="animate-spin mr-1" />}Testar</Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Google Drive & Calendar Section ──────────────────────────────────────────
+function GoogleIntegrationSection() {
+  const [serviceAccount, setServiceAccount] = useState("");
+  const [driveFolder, setDriveFolder] = useState("");
+  const [calendarId, setCalendarId] = useState("");
+  const [driveEnabled, setDriveEnabled] = useState(false);
+  const [calendarEnabled, setCalendarEnabled] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    axios.get(`${API}/settings/google-integration`, { headers: getAuthHeader() })
+      .then(r => {
+        setDriveFolder(r.data.drive_folder_id || "");
+        setCalendarId(r.data.calendar_id || "");
+        setDriveEnabled(r.data.drive_enabled ?? false);
+        setCalendarEnabled(r.data.calendar_enabled ?? false);
+        if (r.data.has_service_account) setServiceAccount("••••••••••••••••");
+      }).catch(() => {});
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const body = { drive_folder_id: driveFolder, calendar_id: calendarId, drive_enabled: driveEnabled, calendar_enabled: calendarEnabled };
+      if (serviceAccount && !serviceAccount.startsWith("•")) body.service_account_json = serviceAccount;
+      await axios.put(`${API}/settings/google-integration`, body, { headers: getAuthHeader() });
+      toast.success("Configurações Google salvas!");
+    } catch (err) { toast.error(err.response?.data?.detail || "Erro ao salvar"); }
+    setSaving(false);
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-5 mb-4">
+      <h3 className="text-sm font-semibold flex items-center gap-2 mb-3"><HardDrive size={15} />Google Drive & Calendar</h3>
+      <p className="text-xs text-muted-foreground mb-3">Cria pasta no Drive por cliente e agenda reuniões no Google Calendar via Service Account.</p>
+      <div className="mb-3">
+        <Label className="text-xs mb-1 block">Service Account JSON</Label>
+        <textarea value={serviceAccount} onChange={e => setServiceAccount(e.target.value)} rows={4}
+          placeholder='{"type":"service_account","project_id":"..."}'
+          className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-background resize-y focus:outline-none focus:ring-2 focus:ring-ring font-mono" />
+      </div>
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <Label className="text-xs mb-1 block">Drive Folder ID</Label>
+          <Input value={driveFolder} onChange={e => setDriveFolder(e.target.value)} placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs" className="text-xs" />
+        </div>
+        <div>
+          <Label className="text-xs mb-1 block">Calendar ID</Label>
+          <Input value={calendarId} onChange={e => setCalendarId(e.target.value)} placeholder="primary" className="text-xs" />
+        </div>
+      </div>
+      <div className="flex gap-4 mb-4">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Switch checked={driveEnabled} onCheckedChange={setDriveEnabled} />
+          <span className="text-xs text-muted-foreground">Drive ativo</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Switch checked={calendarEnabled} onCheckedChange={setCalendarEnabled} />
+          <span className="text-xs text-muted-foreground">Calendar ativo</span>
+        </label>
+      </div>
+      <Button size="sm" onClick={handleSave} disabled={saving}>{saving && <Loader2 size={13} className="animate-spin mr-1" />}Salvar</Button>
+    </div>
+  );
+}
+
+// ─── Contract Template Section ────────────────────────────────────────────────
+function ContractTemplateSection() {
+  const [template, setTemplate] = useState("");
+  const [enabled, setEnabled] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    axios.get(`${API}/settings/contract-template`, { headers: getAuthHeader() })
+      .then(r => {
+        setTemplate(r.data.template || "");
+        setEnabled(r.data.enabled ?? false);
+      }).catch(() => {});
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await axios.put(`${API}/settings/contract-template`, { template, enabled }, { headers: getAuthHeader() });
+      toast.success("Template de contrato salvo!");
+    } catch (err) { toast.error(err.response?.data?.detail || "Erro ao salvar"); }
+    setSaving(false);
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-5 mb-4">
+      <h3 className="text-sm font-semibold flex items-center gap-2 mb-2"><FileText size={15} />Template de Contrato</h3>
+      <p className="text-xs text-muted-foreground mb-3">
+        Variáveis: <code className="bg-muted px-1 rounded text-[11px]">{"{{nome}}"}</code>{" "}
+        <code className="bg-muted px-1 rounded text-[11px]">{"{{email}}"}</code>{" "}
+        <code className="bg-muted px-1 rounded text-[11px]">{"{{valor}}"}</code>{" "}
+        <code className="bg-muted px-1 rounded text-[11px]">{"{{data_inicio}}"}</code>
+      </p>
+      <textarea value={template} onChange={e => setTemplate(e.target.value)} rows={10}
+        placeholder={"CONTRATO DE PRESTAÇÃO DE SERVIÇOS\n\nContratante: {{nome}}\nEmail: {{email}}\nValor: R$ {{valor}}..."}
+        className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-background resize-y focus:outline-none focus:ring-2 focus:ring-ring font-mono mb-3" />
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Switch checked={enabled} onCheckedChange={setEnabled} />
+          <span className="text-xs text-muted-foreground">Gerar PDF ao criar cliente (requer Drive ativo)</span>
+        </label>
+        <Button size="sm" onClick={handleSave} disabled={saving}>{saving && <Loader2 size={13} className="animate-spin mr-1" />}Salvar template</Button>
+      </div>
+    </div>
+  );
+}
+
 function Accordion({ title, icon: Icon, defaultOpen = false, children }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -1066,6 +1253,14 @@ export default function Configuracoes() {
           </div>
         </div>
 
+        {/* Integrações Nativas */}
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Integrações Nativas</p>
+        <AsaasSection />
+        <GoogleIntegrationSection />
+        <ContractTemplateSection />
+
+        {/* Webhooks N8N (legado) */}
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 mt-2">Webhooks N8N (legado)</p>
         <WebhookSection
           title="N8N — Webhook de Clientes"
           icon={Globe}
