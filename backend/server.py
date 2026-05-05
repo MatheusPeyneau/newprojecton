@@ -1060,7 +1060,29 @@ async def asaas_create_client_and_charge(client_doc: dict) -> dict:
             customer = resp.json()
             result["asaas_customer_id"] = customer.get("id")
 
-            # 2. Criar cobrança
+            # 2. Configurar notificações do cliente (customer-level)
+            notif_list_resp = await http.get(
+                f"{base_url}/customers/{result['asaas_customer_id']}/notifications",
+                headers=headers,
+            )
+            if notif_list_resp.status_code == 200:
+                for notif in notif_list_resp.json().get("data", []):
+                    is_due_warning = notif.get("event") == "PAYMENT_DUEDATE_WARNING"
+                    await http.put(
+                        f"{base_url}/notifications/{notif['id']}",
+                        json={
+                            "enabled": is_due_warning,
+                            "emailEnabledForProvider": False,
+                            "smsEnabledForProvider": False,
+                            "emailEnabledForCustomer": is_due_warning and settings.get("notify_due_email", False),
+                            "smsEnabledForCustomer": False,
+                            "whatsappEnabledForCustomer": is_due_warning and settings.get("notify_due_whatsapp", False),
+                            "phoneCallEnabledForCustomer": False,
+                        },
+                        headers=headers,
+                    )
+
+            # 3. Criar cobrança
             if client_doc.get("monthly_value", 0) > 0 and result["asaas_customer_id"]:
                 due = client_doc.get("due_date")
                 if not due:
@@ -1091,29 +1113,6 @@ async def asaas_create_client_and_charge(client_doc: dict) -> dict:
                     result["asaas_payment_id"] = payment.get("id")
                     result["asaas_payment_link"] = payment.get("bankSlipUrl") or payment.get("invoiceUrl")
 
-                    # Disable all default notifications; enable only PAYMENT_DUE per user settings
-                    if result["asaas_payment_id"]:
-                        notif_resp = await http.get(
-                            f"{base_url}/notifications",
-                            params={"payment": result["asaas_payment_id"]},
-                            headers=headers,
-                        )
-                        if notif_resp.status_code == 200:
-                            for notif in notif_resp.json().get("data", []):
-                                is_due = notif.get("event") == "PAYMENT_DUE"
-                                await http.put(
-                                    f"{base_url}/notifications/{notif['id']}",
-                                    json={
-                                        "enabled": is_due,
-                                        "emailEnabledForProvider": False,
-                                        "smsEnabledForProvider": False,
-                                        "emailEnabledForCustomer": is_due and settings.get("notify_due_email", False),
-                                        "smsEnabledForCustomer": False,
-                                        "whatsappEnabledForCustomer": is_due and settings.get("notify_due_whatsapp", False),
-                                        "phoneCallEnabledForCustomer": False,
-                                    },
-                                    headers=headers,
-                                )
                 else:
                     logger.error(f"Asaas payment creation failed: {resp2.text}")
 
