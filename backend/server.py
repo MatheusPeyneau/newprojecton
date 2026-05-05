@@ -1082,39 +1082,49 @@ async def asaas_create_client_and_charge(client_doc: dict) -> dict:
                         headers=headers,
                     )
 
-            # 3. Criar cobrança
+            # 3. Criar cobranças (uma por mês do contrato)
             if client_doc.get("monthly_value", 0) > 0 and result["asaas_customer_id"]:
-                due = client_doc.get("due_date")
-                if not due:
+                base_due = client_doc.get("due_date")
+                if not base_due:
                     now = datetime.now(timezone.utc)
                     m = now.month % 12 + 1
                     y = now.year + (1 if now.month == 12 else 0)
-                    due = f"{y}-{m:02d}-01"
+                    base_due = f"{y}-{m:02d}-01"
 
                 billing_type = client_doc.get("billing_type", "BOLETO").upper()
                 if billing_type not in ("BOLETO", "PIX", "CREDIT_CARD"):
                     billing_type = "BOLETO"
 
-                charge_payload = {
-                    "customer": result["asaas_customer_id"],
-                    "billingType": billing_type,
-                    "value": float(client_doc.get("monthly_value", 0)),
-                    "dueDate": due,
-                    "description": f"Mensalidade — {client_doc.get('name', '')}",
-                    "externalReference": client_doc.get("client_id", ""),
-                }
-                contract_months = client_doc.get("contract_months")
-                if contract_months and int(contract_months) > 1:
-                    charge_payload["cycle"] = "MONTHLY"
-                    charge_payload["maxPayments"] = int(contract_months)
-                resp2 = await http.post(f"{base_url}/payments", json=charge_payload, headers=headers)
-                if resp2.status_code in (200, 201):
-                    payment = resp2.json()
-                    result["asaas_payment_id"] = payment.get("id")
-                    result["asaas_payment_link"] = payment.get("bankSlipUrl") or payment.get("invoiceUrl")
+                contract_months = max(1, int(client_doc.get("contract_months") or 1))
 
-                else:
-                    logger.error(f"Asaas payment creation failed: {resp2.text}")
+                def _add_months(date_str: str, months: int) -> str:
+                    import calendar as _cal
+                    from datetime import date as _date
+                    d = _date.fromisoformat(date_str)
+                    m = d.month + months
+                    y = d.year + (m - 1) // 12
+                    m = (m - 1) % 12 + 1
+                    max_day = _cal.monthrange(y, m)[1]
+                    return _date(y, m, min(d.day, max_day)).isoformat()
+
+                for i in range(contract_months):
+                    month_label = f" ({i + 1}/{contract_months})" if contract_months > 1 else ""
+                    payload = {
+                        "customer": result["asaas_customer_id"],
+                        "billingType": billing_type,
+                        "value": float(client_doc.get("monthly_value", 0)),
+                        "dueDate": _add_months(base_due, i),
+                        "description": f"Mensalidade{month_label} — {client_doc.get('name', '')}",
+                        "externalReference": client_doc.get("client_id", ""),
+                    }
+                    resp2 = await http.post(f"{base_url}/payments", json=payload, headers=headers)
+                    if resp2.status_code in (200, 201):
+                        if i == 0:
+                            payment = resp2.json()
+                            result["asaas_payment_id"] = payment.get("id")
+                            result["asaas_payment_link"] = payment.get("bankSlipUrl") or payment.get("invoiceUrl")
+                    else:
+                        logger.error(f"Asaas payment {i+1}/{contract_months} failed: {resp2.text}")
 
         logger.info(f"Asaas: cliente {result['asaas_customer_id']} criado, cobrança {result['asaas_payment_id']}")
     except Exception as exc:
