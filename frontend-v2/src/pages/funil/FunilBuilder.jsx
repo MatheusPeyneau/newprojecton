@@ -549,10 +549,9 @@ function FunilBuilderInner() {
   // Adicionar nó via quick-add e conectar automaticamente
   const handleQuickAdd = useCallback((type, extraData = {}) => {
     if (!rfInstance || !quickAdd) return;
-    const bounds = reactFlowWrapper.current.getBoundingClientRect();
     const pos = rfInstance.screenToFlowPosition({
-      x: quickAdd.screenX - bounds.left,
-      y: quickAdd.screenY - bounds.top,
+      x: quickAdd.screenX,
+      y: quickAdd.screenY,
     });
     const id = newId();
     const newNode = {
@@ -606,10 +605,9 @@ function FunilBuilderInner() {
       e.preventDefault();
       const type = e.dataTransfer.getData("application/reactflow");
       if (!type || !rfInstance) return;
-      const bounds = reactFlowWrapper.current.getBoundingClientRect();
       const pos = rfInstance.screenToFlowPosition({
-        x: e.clientX - bounds.left,
-        y: e.clientY - bounds.top,
+        x: e.clientX,
+        y: e.clientY,
       });
       let extraData = {};
       const iconRaw = e.dataTransfer.getData("application/reactflow-icon");
