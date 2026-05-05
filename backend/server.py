@@ -1279,16 +1279,18 @@ async def calendar_create_event(payload: dict) -> tuple[Optional[str], Optional[
 
         def _create_event():
             service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+            email = payload.get("email", "")
+            description = payload.get("notes", "")
+            if email:
+                description = f"Email do lead: {email}\n\n{description}".strip()
             event = {
                 "summary": payload.get("meetingTitle", "Reunião"),
-                "description": payload.get("notes", ""),
+                "description": description,
                 "start": {"dateTime": f"{meeting_date}T{start_time}:00", "timeZone": "America/Sao_Paulo"},
                 "end":   {"dateTime": f"{meeting_date}T{end_time}:00",   "timeZone": "America/Sao_Paulo"},
             }
-            email = payload.get("email", "")
-            if email:
-                event["attendees"] = [{"email": email}]
-            result = service.events().insert(calendarId=calendar_id, body=event, sendUpdates="all").execute()
+            # Service accounts can't add attendees in personal Gmail calendars (requires Domain-Wide Delegation)
+            result = service.events().insert(calendarId=calendar_id, body=event, sendUpdates="none").execute()
             return result.get("htmlLink")
 
         link = await loop.run_in_executor(None, _create_event)
