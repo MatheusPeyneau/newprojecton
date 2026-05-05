@@ -1091,7 +1091,7 @@ async def asaas_create_client_and_charge(client_doc: dict) -> dict:
                     result["asaas_payment_id"] = payment.get("id")
                     result["asaas_payment_link"] = payment.get("bankSlipUrl") or payment.get("invoiceUrl")
 
-                    # Configure PAYMENT_DUE notification only
+                    # Disable all default notifications; enable only PAYMENT_DUE per user settings
                     if result["asaas_payment_id"]:
                         notif_resp = await http.get(
                             f"{base_url}/notifications",
@@ -1100,14 +1100,17 @@ async def asaas_create_client_and_charge(client_doc: dict) -> dict:
                         )
                         if notif_resp.status_code == 200:
                             for notif in notif_resp.json().get("data", []):
-                                if notif.get("event") != "PAYMENT_DUE":
-                                    continue
+                                is_due = notif.get("event") == "PAYMENT_DUE"
                                 await http.put(
                                     f"{base_url}/notifications/{notif['id']}",
                                     json={
-                                        "enabled": True,
-                                        "emailEnabledForCustomer": settings.get("notify_due_email", False),
-                                        "whatsappEnabledForCustomer": settings.get("notify_due_whatsapp", False),
+                                        "enabled": is_due,
+                                        "emailEnabledForProvider": False,
+                                        "smsEnabledForProvider": False,
+                                        "emailEnabledForCustomer": is_due and settings.get("notify_due_email", False),
+                                        "smsEnabledForCustomer": False,
+                                        "whatsappEnabledForCustomer": is_due and settings.get("notify_due_whatsapp", False),
+                                        "phoneCallEnabledForCustomer": False,
                                     },
                                     headers=headers,
                                 )
