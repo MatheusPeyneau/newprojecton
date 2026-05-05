@@ -316,9 +316,12 @@ export default function ConfiguracoesIntegracoes() {
       </div>
 
       {/* Integrações nativas */}
-      <AsaasSection />
-      <GoogleIntegrationSection />
-      <ContractTemplateSection />
+      <div className="mb-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Integrações Nativas</p>
+        <AsaasSection />
+        <GoogleIntegrationSection />
+        <ContractTemplateSection />
+      </div>
 
       {/* Webhooks N8N (legado) */}
       <div className="mb-3">
