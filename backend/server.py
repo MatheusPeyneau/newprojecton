@@ -1079,6 +1079,10 @@ async def asaas_create_client_and_charge(client_doc: dict) -> dict:
                     "description": f"Mensalidade — {client_doc.get('name', '')}",
                     "externalReference": client_doc.get("client_id", ""),
                 }
+                contract_months = client_doc.get("contract_months")
+                if contract_months and int(contract_months) > 1:
+                    charge_payload["cycle"] = "MONTHLY"
+                    charge_payload["maxPayments"] = int(contract_months)
                 resp2 = await http.post(f"{base_url}/payments", json=charge_payload, headers=headers)
                 if resp2.status_code in (200, 201):
                     payment = resp2.json()
