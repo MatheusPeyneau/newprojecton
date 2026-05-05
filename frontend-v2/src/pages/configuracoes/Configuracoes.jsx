@@ -895,6 +895,7 @@ function GoogleDriveSection() {
   const [serviceAccount, setServiceAccount] = useState("");
   const [driveFolder, setDriveFolder] = useState("");
   const [driveEnabled, setDriveEnabled] = useState(false);
+  const [contractTemplateDocId, setContractTemplateDocId] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -902,6 +903,7 @@ function GoogleDriveSection() {
       .then(r => {
         setDriveFolder(r.data.drive_folder_id || "");
         setDriveEnabled(r.data.drive_enabled ?? false);
+        setContractTemplateDocId(r.data.contract_template_doc_id || "");
         if (r.data.has_service_account) setServiceAccount("••••••••••••••••");
       }).catch(() => {});
   }, []);
@@ -909,7 +911,7 @@ function GoogleDriveSection() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const body = { drive_root_folder_id: driveFolder, drive_enabled: driveEnabled };
+      const body = { drive_root_folder_id: driveFolder, drive_enabled: driveEnabled, contract_template_doc_id: contractTemplateDocId };
       if (serviceAccount && !serviceAccount.startsWith("•")) body.service_account_json = serviceAccount;
       await axios.put(`${API}/settings/google-drive`, body, { headers: getAuthHeader() });
       toast.success("Configurações Google Drive salvas!");
@@ -918,9 +920,9 @@ function GoogleDriveSection() {
   };
 
   return (
-    <div className="space-y-0">
-      <p className="text-xs text-muted-foreground mb-3">Cria uma pasta no Google Drive automaticamente ao cadastrar cada novo cliente.</p>
-      <div className="mb-3">
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">Cria uma pasta no Google Drive automaticamente ao cadastrar cada novo cliente e gera o contrato a partir do template.</p>
+      <div>
         <Label className="text-xs mb-1 block">Service Account JSON</Label>
         <textarea
           value={serviceAccount}
@@ -931,12 +933,17 @@ function GoogleDriveSection() {
         />
         <p className="text-[10px] text-muted-foreground mt-1">Gerado no Google Cloud Console → IAM → Contas de serviço</p>
       </div>
-      <div className="mb-4">
+      <div>
         <Label className="text-xs mb-1 block">ID da pasta raiz no Drive</Label>
         <Input value={driveFolder} onChange={e => setDriveFolder(e.target.value)} placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs" className="text-xs" />
         <p className="text-[10px] text-muted-foreground mt-1">ID da URL ao abrir a pasta no Drive. A service account precisa ter acesso de Editor.</p>
       </div>
-      <div className="flex items-center gap-3 mb-4">
+      <div>
+        <Label className="text-xs mb-1 block">ID do documento template do contrato</Label>
+        <Input value={contractTemplateDocId} onChange={e => setContractTemplateDocId(e.target.value)} placeholder="1XMOUS-OST3FzFg0ZRjHBXcUizbcEPwk71qkDutWgoMA" className="text-xs" />
+        <p className="text-[10px] text-muted-foreground mt-1">ID do Google Docs usado como template. Abra o documento → copie o ID da URL. Placeholders disponíveis: <code className="font-mono">[NOME-EMPRESA]</code> <code className="font-mono">[CNPJ]</code> <code className="font-mono">[EMAIL]</code> <code className="font-mono">[TELEFONE]</code> <code className="font-mono">[DATA-INICIO]</code> <code className="font-mono">[DURACAO]</code> <code className="font-mono">[VALOR]</code></p>
+      </div>
+      <div className="flex items-center gap-3">
         <label className="flex items-center gap-2 cursor-pointer">
           <Switch checked={driveEnabled} onCheckedChange={setDriveEnabled} />
           <span className="text-xs text-muted-foreground">{driveEnabled ? "Ativo" : "Inativo"}</span>

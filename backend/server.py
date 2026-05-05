@@ -1022,6 +1022,7 @@ class GoogleDriveSettings(BaseModel):
     service_account_json: str = ""
     drive_root_folder_id: str = ""
     drive_enabled: bool = False
+    contract_template_doc_id: str = ""
 
 class GoogleCalendarSettings(BaseModel):
     calendar_id: str = "primary"
@@ -1223,6 +1224,59 @@ async def drive_upload_file(folder_id: str, filename: str, content_bytes: bytes,
         return url
     except Exception as exc:
         logger.error(f"Drive upload error: {exc}")
+        return None
+
+
+async def drive_create_contract_from_template(client_doc: dict, folder_id: str) -> Optional[str]:
+    """Copy Google Docs template to client folder, replace placeholders, return doc link."""
+    try:
+        settings = await _get_google_settings()
+        template_doc_id = settings.get("contract_template_doc_id", "")
+        if not template_doc_id or not settings.get("service_account_json"):
+            return None
+
+        creds = _build_google_creds(
+            settings["service_account_json"],
+            ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/documents"],
+        )
+        if not creds:
+            return None
+
+        client_name = client_doc.get("name", "Cliente")
+        loop = asyncio.get_running_loop()
+
+        def _copy_and_replace():
+            drive_svc = build("drive", "v3", credentials=creds, cache_discovery=False)
+            docs_svc = build("docs", "v1", credentials=creds, cache_discovery=False)
+
+            # 1. Copy template to client folder
+            copied = drive_svc.files().copy(
+                fileId=template_doc_id,
+                body={"name": f"{client_name} - CONTRATO", "parents": [folder_id]},
+            ).execute()
+            copied_id = copied["id"]
+
+            # 2. Replace placeholders (same as n8n replaceAll)
+            requests = [
+                {"replaceAllText": {"containsText": {"text": "[NOME-EMPRESA]", "matchCase": True}, "replaceText": client_name}},
+                {"replaceAllText": {"containsText": {"text": "[CNPJ]", "matchCase": True}, "replaceText": client_doc.get("cpf_cnpj", "")}},
+                {"replaceAllText": {"containsText": {"text": "[EMAIL]", "matchCase": True}, "replaceText": client_doc.get("email", "")}},
+                {"replaceAllText": {"containsText": {"text": "[TELEFONE]", "matchCase": True}, "replaceText": client_doc.get("phone", "")}},
+                {"replaceAllText": {"containsText": {"text": "[DATA-INICIO]", "matchCase": True}, "replaceText": client_doc.get("start_date", "")}},
+                {"replaceAllText": {"containsText": {"text": "[DURACAO]", "matchCase": True}, "replaceText": str(client_doc.get("contract_months", ""))}},
+                {"replaceAllText": {"containsText": {"text": "[VALOR]", "matchCase": True}, "replaceText": str(client_doc.get("monthly_value", ""))}},
+            ]
+            docs_svc.documents().batchUpdate(
+                documentId=copied_id, body={"requests": requests}
+            ).execute()
+
+            return f"https://docs.google.com/document/d/{copied_id}/edit"
+
+        link = await loop.run_in_executor(None, _copy_and_replace)
+        logger.info(f"Drive: contrato criado → {link}")
+        return link
+    except Exception as exc:
+        logger.error(f"Drive contract creation error: {exc}")
         return None
 
 
@@ -1431,6 +1485,7 @@ async def get_google_drive_settings(current_user: dict = Depends(get_current_use
         "has_service_account": bool(s.get("service_account_json")),
         "drive_folder_id": s.get("drive_root_folder_id", ""),
         "drive_enabled": s.get("drive_enabled", False),
+        "contract_template_doc_id": s.get("contract_template_doc_id", ""),
     }
 
 @api_router.put("/settings/google-drive")
@@ -1438,6 +1493,7 @@ async def save_google_drive_settings(body: GoogleDriveSettings, current_user: di
     update: dict = {
         "drive_root_folder_id": body.drive_root_folder_id,
         "drive_enabled": body.drive_enabled,
+        "contract_template_doc_id": body.contract_template_doc_id,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     if body.service_account_json and not body.service_account_json.startswith("•"):
@@ -1653,20 +1709,10 @@ async def _run_client_integrations(client_doc: dict):
     if folder_id:
         updates["drive_folder_id"] = folder_id
 
-        # 3. Contrato PDF — gerar e subir na pasta
-        template = await _get_contract_template()
-        ct_settings = await db.settings.find_one({"setting_id": "contract_template"}, {"_id": 0})
-        if template and ct_settings and ct_settings.get("enabled"):
-            pdf_bytes = generate_contract_pdf(client_doc, template)
-            if pdf_bytes:
-                contract_url = await drive_upload_file(
-                    folder_id,
-                    f"Contrato - {client_doc.get('name', client_id)}.pdf",
-                    pdf_bytes,
-                    "application/pdf",
-                )
-                if contract_url:
-                    updates["contract_drive_url"] = contract_url
+        # 3. Contrato — copiar template Google Docs, substituir placeholders
+        contract_url = await drive_create_contract_from_template(client_doc, folder_id)
+        if contract_url:
+            updates["contract_drive_url"] = contract_url
 
     # 4. N8N webhook (mantém compatibilidade se configurado)
     await send_n8n_webhook(client_doc)
