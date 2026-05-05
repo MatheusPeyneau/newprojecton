@@ -1532,36 +1532,47 @@ async def google_oauth_start(request: Request):
     return RedirectResponse(auth_url)
 
 @app.get("/api/google/callback")
-async def google_oauth_callback(code: str, request: Request):
+async def google_oauth_callback(request: Request, code: Optional[str] = None, error: Optional[str] = None):
     """Handle OAuth2 callback — exchange code for tokens and store refresh_token."""
-    flow = Flow.from_client_config(
-        {"web": {
-            "client_id": GOOGLE_CLIENT_ID,
-            "client_secret": GOOGLE_CLIENT_SECRET,
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-        }},
-        scopes=GOOGLE_CALENDAR_SCOPES,
-        redirect_uri=GOOGLE_REDIRECT_URI,
-    )
-    flow.fetch_token(code=code)
-    creds = flow.credentials
-    async with httpx.AsyncClient() as hc:
-        r = await hc.get(
-            "https://www.googleapis.com/oauth2/v2/userinfo",
-            headers={"Authorization": f"Bearer {creds.token}"},
+    if error:
+        logger.error(f"Google OAuth error: {error}")
+        return RedirectResponse(f"{FRONTEND_URL}/configuracoes?oauth=error&msg={error}")
+    if not code:
+        return RedirectResponse(f"{FRONTEND_URL}/configuracoes?oauth=error&msg=no_code")
+    try:
+        flow = Flow.from_client_config(
+            {"web": {
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }},
+            scopes=GOOGLE_CALENDAR_SCOPES,
+            redirect_uri=GOOGLE_REDIRECT_URI,
         )
-        email = r.json().get("email", "")
-    await db.settings.update_one(
-        {"setting_id": "google_integration"},
-        {"$set": {
-            "oauth_refresh_token": creds.refresh_token,
-            "oauth_email": email,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }},
-        upsert=True,
-    )
-    return RedirectResponse(f"{FRONTEND_URL}/configuracoes?oauth=success")
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, lambda: flow.fetch_token(code=code))
+        creds = flow.credentials
+        async with httpx.AsyncClient() as hc:
+            r = await hc.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {creds.token}"},
+            )
+            email = r.json().get("email", "")
+        await db.settings.update_one(
+            {"setting_id": "google_integration"},
+            {"$set": {
+                "oauth_refresh_token": creds.refresh_token,
+                "oauth_email": email,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+            upsert=True,
+        )
+        logger.info(f"Google OAuth: conta conectada — {email}")
+        return RedirectResponse(f"{FRONTEND_URL}/configuracoes?oauth=success")
+    except Exception as exc:
+        logger.error(f"Google OAuth callback error: {exc}")
+        return RedirectResponse(f"{FRONTEND_URL}/configuracoes?oauth=error&msg={str(exc)[:200]}")
 
 @api_router.get("/settings/contract-template")
 async def get_contract_template(current_user: dict = Depends(get_current_user)):

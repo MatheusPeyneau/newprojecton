@@ -975,6 +975,9 @@ function GoogleCalendarSection() {
       toast.success("Conta Google conectada com sucesso!");
       window.history.replaceState({}, "", window.location.pathname);
       loadData();
+    } else if (params.get("oauth") === "error") {
+      toast.error(`Erro ao conectar com Google: ${params.get("msg") || "erro desconhecido"}`);
+      window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
 
