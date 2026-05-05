@@ -1,4 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Response, Request
+from fastapi.responses import RedirectResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -33,6 +34,14 @@ try:
 except ImportError:
     GOOGLE_LIBS_OK = False
 
+# Google OAuth2 (Authorization Code Flow — suporta convidados em calendários pessoais)
+try:
+    from google_auth_oauthlib.flow import Flow
+    from google.oauth2.credentials import Credentials as OAuthCredentials
+    GOOGLE_OAUTH_OK = True
+except ImportError:
+    GOOGLE_OAUTH_OK = False
+
 # PDF generation
 try:
     from reportlab.lib.pagesizes import A4
@@ -56,6 +65,11 @@ if not JWT_SECRET:
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_DAYS = 7
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "https://newprojecton-production.up.railway.app/api/google/callback")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://newprojecton-production.up.railway.app")
+GOOGLE_CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar", "https://www.googleapis.com/auth/userinfo.email", "openid"]
 
 PLAN_LIMITS = {
     "free":    {"clients": 3,  "carousels_month": 10, "leads": 100, "members": 5},
@@ -1253,48 +1267,76 @@ def generate_contract_pdf(client_doc: dict, template: str) -> bytes:
         return b""
 
 
+async def _get_oauth2_calendar_creds():
+    """Build OAuth2 credentials from stored refresh token."""
+    if not GOOGLE_OAUTH_OK or not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return None
+    s = await _get_google_settings()
+    refresh_token = s.get("oauth_refresh_token")
+    if not refresh_token:
+        return None
+    return OAuthCredentials(
+        token=None,
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        scopes=GOOGLE_CALENDAR_SCOPES,
+    )
+
+
 async def calendar_create_event(payload: dict) -> tuple[Optional[str], Optional[str]]:
-    """Create a Google Calendar event. Returns (event_link, error_message)."""
+    """Create a Google Calendar event. Returns (event_link, error_message).
+    Uses OAuth2 when available (supports attendees), falls back to service account."""
     try:
         settings = await _get_google_settings()
         if not settings.get("calendar_enabled"):
             return None, None  # silently skip if disabled
-        if not settings.get("service_account_json"):
-            return None, "Service Account não configurada"
 
-        creds = _build_google_creds(
-            settings["service_account_json"],
-            ["https://www.googleapis.com/auth/calendar"]
-        )
-        if not creds:
-            return None, "Credenciais Google inválidas"
+        # Prefer OAuth2 (allows adding attendees/sending invites)
+        creds = await _get_oauth2_calendar_creds()
+        using_oauth = creds is not None
+
+        if not using_oauth:
+            if not settings.get("service_account_json"):
+                return None, "Nenhuma credencial Google configurada. Conecte sua conta Google ou configure a Service Account."
+            creds = _build_google_creds(
+                settings["service_account_json"],
+                ["https://www.googleapis.com/auth/calendar"]
+            )
+            if not creds:
+                return None, "Credenciais Google inválidas"
 
         calendar_id = settings.get("calendar_id", "primary")
         meeting_date = payload.get("meetingDate", "")
         start_time = payload.get("startTime", "09:00")
         end_time = payload.get("endTime", "10:00")
+        email = payload.get("email", "")
 
-        import asyncio
         loop = asyncio.get_running_loop()
 
         def _create_event():
             service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-            email = payload.get("email", "")
             description = payload.get("notes", "")
-            if email:
-                description = f"Email do lead: {email}\n\n{description}".strip()
             event = {
                 "summary": payload.get("meetingTitle", "Reunião"),
                 "description": description,
                 "start": {"dateTime": f"{meeting_date}T{start_time}:00", "timeZone": "America/Sao_Paulo"},
                 "end":   {"dateTime": f"{meeting_date}T{end_time}:00",   "timeZone": "America/Sao_Paulo"},
             }
-            # Service accounts can't add attendees in personal Gmail calendars (requires Domain-Wide Delegation)
-            result = service.events().insert(calendarId=calendar_id, body=event, sendUpdates="none").execute()
+            if email and using_oauth:
+                event["attendees"] = [{"email": email}]
+                send_updates = "all"
+            else:
+                # Service account: put email in description (no attendee support without DWD)
+                if email:
+                    event["description"] = f"Email do lead: {email}\n\n{description}".strip()
+                send_updates = "none"
+            result = service.events().insert(calendarId=calendar_id, body=event, sendUpdates=send_updates).execute()
             return result.get("htmlLink")
 
         link = await loop.run_in_executor(None, _create_event)
-        logger.info(f"Calendar: evento criado → {link}")
+        logger.info(f"Calendar: evento criado ({'OAuth2' if using_oauth else 'ServiceAccount'}) → {link}")
         return link, None
     except Exception as exc:
         err = str(exc)
@@ -1454,6 +1496,72 @@ async def test_google_calendar(current_user: dict = Depends(get_current_user)):
         if "403" in err:
             raise HTTPException(status_code=400, detail="Sem permissão. Compartilhe o calendário com a service account e dê permissão de 'Fazer alterações nos eventos'.")
         raise HTTPException(status_code=400, detail=f"Erro: {err}")
+
+@api_router.get("/settings/google-oauth-status")
+async def get_google_oauth_status(current_user: dict = Depends(get_current_user)):
+    s = await _get_google_settings()
+    return {
+        "connected": bool(s.get("oauth_refresh_token")),
+        "email": s.get("oauth_email", ""),
+    }
+
+@api_router.delete("/settings/google-oauth")
+async def disconnect_google_oauth(current_user: dict = Depends(get_current_user)):
+    await db.settings.update_one(
+        {"setting_id": "google_integration"},
+        {"$unset": {"oauth_refresh_token": "", "oauth_email": ""}},
+    )
+    return {"message": "Conta Google desconectada"}
+
+@app.get("/api/google/auth")
+async def google_oauth_start(request: Request):
+    """Redirect user to Google OAuth consent screen."""
+    if not GOOGLE_OAUTH_OK or not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="OAuth2 não configurado. Adicione GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET nas variáveis de ambiente.")
+    flow = Flow.from_client_config(
+        {"web": {
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }},
+        scopes=GOOGLE_CALENDAR_SCOPES,
+        redirect_uri=GOOGLE_REDIRECT_URI,
+    )
+    auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
+    return RedirectResponse(auth_url)
+
+@app.get("/api/google/callback")
+async def google_oauth_callback(code: str, request: Request):
+    """Handle OAuth2 callback — exchange code for tokens and store refresh_token."""
+    flow = Flow.from_client_config(
+        {"web": {
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }},
+        scopes=GOOGLE_CALENDAR_SCOPES,
+        redirect_uri=GOOGLE_REDIRECT_URI,
+    )
+    flow.fetch_token(code=code)
+    creds = flow.credentials
+    async with httpx.AsyncClient() as hc:
+        r = await hc.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {creds.token}"},
+        )
+        email = r.json().get("email", "")
+    await db.settings.update_one(
+        {"setting_id": "google_integration"},
+        {"$set": {
+            "oauth_refresh_token": creds.refresh_token,
+            "oauth_email": email,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return RedirectResponse(f"{FRONTEND_URL}/configuracoes?oauth=success")
 
 @api_router.get("/settings/contract-template")
 async def get_contract_template(current_user: dict = Depends(get_current_user)):

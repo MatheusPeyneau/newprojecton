@@ -951,15 +951,31 @@ function GoogleDriveSection() {
 function GoogleCalendarSection() {
   const [calendarId, setCalendarId] = useState("primary");
   const [calendarEnabled, setCalendarEnabled] = useState(false);
+  const [oauthStatus, setOauthStatus] = useState({ connected: false, email: "" });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const BACKEND = import.meta.env.VITE_BACKEND_URL;
 
-  useEffect(() => {
+  const loadData = () => {
     axios.get(`${API}/settings/google-calendar`, { headers: getAuthHeader() })
       .then(r => {
         setCalendarId(r.data.calendar_id || "primary");
         setCalendarEnabled(r.data.calendar_enabled ?? false);
       }).catch(() => {});
+    axios.get(`${API}/settings/google-oauth-status`, { headers: getAuthHeader() })
+      .then(r => setOauthStatus(r.data))
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadData();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("oauth") === "success") {
+      toast.success("Conta Google conectada com sucesso!");
+      window.history.replaceState({}, "", window.location.pathname);
+      loadData();
+    }
   }, []);
 
   const handleSave = async () => {
@@ -980,15 +996,51 @@ function GoogleCalendarSection() {
     setTesting(false);
   };
 
+  const handleDisconnect = async () => {
+    setDisconnecting(true);
+    try {
+      await axios.delete(`${API}/settings/google-oauth`, { headers: getAuthHeader() });
+      setOauthStatus({ connected: false, email: "" });
+      toast.success("Conta Google desconectada.");
+    } catch { toast.error("Erro ao desconectar."); }
+    setDisconnecting(false);
+  };
+
   return (
-    <div className="space-y-0">
-      <p className="text-xs text-muted-foreground mb-3">Cria eventos automaticamente quando um lead é movido para uma etapa marcada como <strong>Reunião</strong> no pipeline.</p>
-      <div className="mb-3">
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">Cria eventos automaticamente quando um lead é movido para uma etapa marcada como <strong>Reunião</strong> no pipeline.</p>
+
+      {/* OAuth2 — conexão com conta Google pessoal */}
+      <div className="rounded-lg border border-zinc-200 dark:border-white/[0.06] p-4">
+        {oauthStatus.connected ? (
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Conectado como {oauthStatus.email}</p>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">Convidados serão adicionados automaticamente e receberão convite por email</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
+              {disconnecting ? <Loader2 size={13} className="animate-spin" /> : "Desconectar"}
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Conectar conta Google</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Necessário para enviar convites automáticos ao email do lead</p>
+            </div>
+            <Button size="sm" onClick={() => { window.location.href = `${BACKEND}/api/google/auth`; }}>
+              Conectar com Google
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div>
         <Label className="text-xs mb-1 block">Calendar ID</Label>
         <Input value={calendarId} onChange={e => setCalendarId(e.target.value)} placeholder="primary" className="text-xs" />
-        <p className="text-[10px] text-muted-foreground mt-1">Use <code className="font-mono">primary</code> para o calendário principal ou o ID de outro calendário. A service account configurada no Google Drive precisa ter acesso de Editor a este calendário.</p>
+        <p className="text-[10px] text-muted-foreground mt-1">Use <code className="font-mono">primary</code> para o calendário principal ou o email do calendário (ex: <code className="font-mono">matheussoareslee@gmail.com</code>).</p>
       </div>
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3">
         <label className="flex items-center gap-2 cursor-pointer">
           <Switch checked={calendarEnabled} onCheckedChange={setCalendarEnabled} />
           <span className="text-xs text-muted-foreground">{calendarEnabled ? "Ativo" : "Inativo"}</span>
@@ -996,7 +1048,7 @@ function GoogleCalendarSection() {
       </div>
       <div className="flex gap-2">
         <Button size="sm" onClick={handleSave} disabled={saving}>{saving && <Loader2 size={13} className="animate-spin mr-1" />}Salvar</Button>
-        <Button size="sm" variant="outline" onClick={handleTest} disabled={testing}>{testing && <Loader2 size={13} className="animate-spin mr-1" />}Testar</Button>
+        <Button size="sm" variant="outline" onClick={handleTest} disabled={testing}>{testing && <Loader2 size={13} className="animate-spin mr-1" />}Testar conexão</Button>
       </div>
     </div>
   );
