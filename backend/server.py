@@ -988,22 +988,12 @@ async def call_n8n_with_retry(url: str, payload: dict, retries: int = 3, timeout
 
 # ============= INTEGRATIONS SETTINGS MODELS =============
 
-ASAAS_DEFAULT_NOTIFICATIONS = {
-    "PAYMENT_CREATED":            {"email_provider": False, "sms_provider": False, "email_customer": False, "sms_customer": False, "whatsapp_customer": False},
-    "PAYMENT_UPDATED":            {"email_provider": False, "sms_provider": False, "email_customer": False, "sms_customer": False, "whatsapp_customer": False},
-    "PAYMENT_REMINDER":           {"email_provider": False, "sms_provider": False, "email_customer": False, "sms_customer": False, "whatsapp_customer": False, "days": 10},
-    "PAYMENT_DUE":                {"email_provider": False, "sms_provider": False, "email_customer": False, "sms_customer": False, "whatsapp_customer": False},
-    "PAYMENT_BOLETO_NOT_PRINTED": {"email_provider": False, "sms_provider": False, "email_customer": False, "sms_customer": False},
-    "PAYMENT_OVERDUE":            {"email_provider": False, "sms_provider": False, "email_customer": False, "sms_customer": False, "whatsapp_customer": False, "phone_call_customer": False},
-    "PAYMENT_OVERDUE_REMINDER":   {"email_provider": False, "sms_provider": False, "email_customer": False, "sms_customer": False, "whatsapp_customer": False, "phone_call_customer": False, "days": 7},
-    "PAYMENT_RECEIVED":           {"email_provider": False, "sms_provider": False, "email_customer": False, "sms_customer": False, "whatsapp_customer": False},
-}
-
 class AsaasSettings(BaseModel):
     api_key: str = ""
     sandbox: bool = True
     enabled: bool = False
-    notifications: dict = {}
+    notify_due_email: bool = False
+    notify_due_whatsapp: bool = False
 
 class GoogleIntegrationSettings(BaseModel):
     service_account_json: str = ""   # JSON string da service account
@@ -1101,9 +1091,8 @@ async def asaas_create_client_and_charge(client_doc: dict) -> dict:
                     result["asaas_payment_id"] = payment.get("id")
                     result["asaas_payment_link"] = payment.get("bankSlipUrl") or payment.get("invoiceUrl")
 
-                    # Configure per-event notifications from saved settings
-                    notifications_cfg = settings.get("notifications", {})
-                    if result["asaas_payment_id"] and notifications_cfg:
+                    # Configure PAYMENT_DUE notification only
+                    if result["asaas_payment_id"]:
                         notif_resp = await http.get(
                             f"{base_url}/notifications",
                             params={"payment": result["asaas_payment_id"]},
@@ -1111,25 +1100,15 @@ async def asaas_create_client_and_charge(client_doc: dict) -> dict:
                         )
                         if notif_resp.status_code == 200:
                             for notif in notif_resp.json().get("data", []):
-                                event = notif.get("event", "")
-                                defaults = ASAAS_DEFAULT_NOTIFICATIONS.get(event, {})
-                                event_cfg = {**defaults, **notifications_cfg.get(event, {})}
-                                if not event_cfg:
+                                if notif.get("event") != "PAYMENT_DUE":
                                     continue
-                                payload = {
-                                    "enabled": True,
-                                    "emailEnabledForProvider": event_cfg.get("email_provider", False),
-                                    "smsEnabledForProvider": event_cfg.get("sms_provider", False),
-                                    "emailEnabledForCustomer": event_cfg.get("email_customer", False),
-                                    "smsEnabledForCustomer": event_cfg.get("sms_customer", False),
-                                    "whatsappEnabledForCustomer": event_cfg.get("whatsapp_customer", False),
-                                    "phoneCallEnabledForCustomer": event_cfg.get("phone_call_customer", False),
-                                }
-                                if "days" in event_cfg and event in ("PAYMENT_REMINDER", "PAYMENT_OVERDUE_REMINDER"):
-                                    payload["scheduleOffset"] = event_cfg["days"]
                                 await http.put(
                                     f"{base_url}/notifications/{notif['id']}",
-                                    json=payload,
+                                    json={
+                                        "enabled": True,
+                                        "emailEnabledForCustomer": settings.get("notify_due_email", False),
+                                        "whatsappEnabledForCustomer": settings.get("notify_due_whatsapp", False),
+                                    },
                                     headers=headers,
                                 )
                 else:
@@ -1305,16 +1284,12 @@ async def get_asaas_settings(current_user: dict = Depends(get_current_user)):
     masked_key = ""
     if s.get("api_key"):
         masked_key = "•" * (len(s["api_key"]) - 4) + s["api_key"][-4:]
-    saved_notifs = s.get("notifications", {})
-    notifications = {
-        event: {**defaults, **saved_notifs.get(event, {})}
-        for event, defaults in ASAAS_DEFAULT_NOTIFICATIONS.items()
-    }
     return {
         "api_key_masked": masked_key,
         "sandbox": s.get("sandbox", True),
         "enabled": s.get("enabled", False),
-        "notifications": notifications,
+        "notify_due_email": s.get("notify_due_email", False),
+        "notify_due_whatsapp": s.get("notify_due_whatsapp", False),
     }
 
 @api_router.put("/settings/asaas")
@@ -1323,7 +1298,8 @@ async def save_asaas_settings(body: AsaasSettings, current_user: dict = Depends(
         "setting_id": "asaas",
         "sandbox": body.sandbox,
         "enabled": body.enabled,
-        "notifications": body.notifications,
+        "notify_due_email": body.notify_due_email,
+        "notify_due_whatsapp": body.notify_due_whatsapp,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     if body.api_key and not body.api_key.startswith("•"):

@@ -797,82 +797,6 @@ export function InstagramApiSection() {
 }
 
 // ─── Asaas Section ────────────────────────────────────────────────────────────
-const ASAAS_DEFAULT_NOTIFICATIONS = {
-  PAYMENT_CREATED:            { email_provider: false, sms_provider: false, email_customer: false, sms_customer: false, whatsapp_customer: false },
-  PAYMENT_UPDATED:            { email_provider: false, sms_provider: false, email_customer: false, sms_customer: false, whatsapp_customer: false },
-  PAYMENT_REMINDER:           { email_provider: false, sms_provider: false, email_customer: false, sms_customer: false, whatsapp_customer: false, days: 10 },
-  PAYMENT_DUE:                { email_provider: false, sms_provider: false, email_customer: false, sms_customer: false, whatsapp_customer: false },
-  PAYMENT_BOLETO_NOT_PRINTED: { email_provider: false, sms_provider: false, email_customer: false, sms_customer: false },
-  PAYMENT_OVERDUE:            { email_provider: false, sms_provider: false, email_customer: false, sms_customer: false, whatsapp_customer: false, phone_call_customer: false },
-  PAYMENT_OVERDUE_REMINDER:   { email_provider: false, sms_provider: false, email_customer: false, sms_customer: false, whatsapp_customer: false, phone_call_customer: false, days: 7 },
-  PAYMENT_RECEIVED:           { email_provider: false, sms_provider: false, email_customer: false, sms_customer: false, whatsapp_customer: false },
-};
-
-function EventRow({ cfg, onChange, title, description, hasWhatsApp = true, hasPhoneCall = false, daysField = null }) {
-  const set = (field, val) => onChange(field, val);
-  const titleParts = Array.isArray(title) ? title : null;
-
-  return (
-    <div className="py-3 border-b border-border last:border-b-0">
-      <p className="text-xs font-medium text-foreground mb-0.5">
-        {titleParts ? (
-          <>
-            {titleParts[0]}
-            <input
-              type="number" min={1} max={60}
-              value={cfg[daysField] ?? 1}
-              onChange={e => set(daysField, Math.max(1, parseInt(e.target.value) || 1))}
-              className="inline-block w-12 mx-1 px-1 py-0 text-xs border border-border rounded text-center bg-background"
-            />
-            {titleParts[1]}
-          </>
-        ) : title}
-      </p>
-      <p className="text-[11px] text-muted-foreground mb-2">{description}</p>
-      <div className="space-y-1.5 ml-1">
-        <div>
-          <p className="text-[10px] text-muted-foreground font-medium mb-1">Para mim:</p>
-          <div className="flex gap-4 ml-2">
-            <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
-              <input type="checkbox" checked={cfg.email_provider} onChange={e => set("email_provider", e.target.checked)} className="rounded" />
-              Email
-            </label>
-            <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
-              <input type="checkbox" checked={cfg.sms_provider} onChange={e => set("sms_provider", e.target.checked)} className="rounded" />
-              SMS
-            </label>
-          </div>
-        </div>
-        <div>
-          <p className="text-[10px] text-muted-foreground font-medium mb-1">Para meu cliente:</p>
-          <div className="flex gap-4 flex-wrap ml-2">
-            {hasWhatsApp && (
-              <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
-                <input type="checkbox" checked={cfg.whatsapp_customer} onChange={e => set("whatsapp_customer", e.target.checked)} className="rounded" />
-                WhatsApp
-              </label>
-            )}
-            <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
-              <input type="checkbox" checked={cfg.email_customer} onChange={e => set("email_customer", e.target.checked)} className="rounded" />
-              Email
-            </label>
-            <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
-              <input type="checkbox" checked={cfg.sms_customer} onChange={e => set("sms_customer", e.target.checked)} className="rounded" />
-              SMS
-            </label>
-            {hasPhoneCall && (
-              <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none opacity-60" title="Requer plano Asaas premium">
-                <input type="checkbox" checked={cfg.phone_call_customer} onChange={e => set("phone_call_customer", e.target.checked)} className="rounded" />
-                Ligação
-              </label>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function AsaasSection() {
   const [apiKey, setApiKey] = useState("");
   const [sandbox, setSandbox] = useState(true);
@@ -881,7 +805,8 @@ function AsaasSection() {
   const [maskedKey, setMaskedKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [notifications, setNotifications] = useState(ASAAS_DEFAULT_NOTIFICATIONS);
+  const [notifyDueEmail, setNotifyDueEmail] = useState(false);
+  const [notifyDueWhatsapp, setNotifyDueWhatsapp] = useState(false);
 
   useEffect(() => {
     axios.get(`${API}/settings/asaas`, { headers: getAuthHeader() })
@@ -889,25 +814,15 @@ function AsaasSection() {
         setMaskedKey(r.data.api_key_masked || "");
         setSandbox(r.data.sandbox ?? true);
         setEnabled(r.data.enabled ?? false);
-        if (r.data.notifications) {
-          setNotifications(prev => {
-            const merged = { ...prev };
-            for (const [event, cfg] of Object.entries(r.data.notifications)) {
-              merged[event] = { ...(prev[event] || {}), ...cfg };
-            }
-            return merged;
-          });
-        }
+        setNotifyDueEmail(r.data.notify_due_email ?? false);
+        setNotifyDueWhatsapp(r.data.notify_due_whatsapp ?? false);
       }).catch(() => {});
   }, []);
-
-  const setNotif = (event, field, val) =>
-    setNotifications(prev => ({ ...prev, [event]: { ...prev[event], [field]: val } }));
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const body = { sandbox, enabled, notifications };
+      const body = { sandbox, enabled, notify_due_email: notifyDueEmail, notify_due_whatsapp: notifyDueWhatsapp };
       if (apiKey) body.api_key = apiKey;
       await axios.put(`${API}/settings/asaas`, body, { headers: getAuthHeader() });
       if (apiKey) { setMaskedKey(`${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`); setApiKey(""); }
@@ -951,72 +866,25 @@ function AsaasSection() {
           <span className="text-xs text-muted-foreground">Modo sandbox (testes)</span>
         </label>
       </div>
-      <div className="flex gap-2 mb-5">
-        <Button size="sm" onClick={handleSave} disabled={saving}>{saving && <Loader2 size={13} className="animate-spin mr-1" />}Salvar</Button>
-        <Button size="sm" variant="outline" onClick={handleTest} disabled={testing}>{testing && <Loader2 size={13} className="animate-spin mr-1" />}Testar</Button>
+
+      <div className="border-t border-border pt-4 mb-4">
+        <p className="text-xs font-semibold text-foreground mb-1">Avisar cliente no vencimento da cobrança</p>
+        <p className="text-[11px] text-muted-foreground mb-3">Enviado no dia do vencimento caso a cobrança ainda não tenha sido paga.</p>
+        <div className="flex gap-5">
+          <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+            <Switch checked={notifyDueWhatsapp} onCheckedChange={setNotifyDueWhatsapp} />
+            WhatsApp
+          </label>
+          <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+            <Switch checked={notifyDueEmail} onCheckedChange={setNotifyDueEmail} />
+            Email
+          </label>
+        </div>
       </div>
 
-      {/* ── Notification Groups ─────────────────────────────────── */}
-      <div className="border-t border-border pt-4">
-        <p className="text-xs font-semibold text-foreground mb-1">Notificações para cobranças antes do vencimento</p>
-        <EventRow
-          cfg={notifications.PAYMENT_CREATED}
-          onChange={(f, v) => setNotif("PAYMENT_CREATED", f, v)}
-          title="Avisar criação de novas cobranças"
-          description="Esta mensagem será enviada quando você gerar novas cobranças."
-        />
-        <EventRow
-          cfg={notifications.PAYMENT_UPDATED}
-          onChange={(f, v) => setNotif("PAYMENT_UPDATED", f, v)}
-          title="Avisar alteração no valor ou data de vencimento das cobranças"
-          description="Esta mensagem será enviada quando você alterar a data de vencimento ou o valor das cobranças."
-        />
-        <EventRow
-          cfg={notifications.PAYMENT_REMINDER}
-          onChange={(f, v) => setNotif("PAYMENT_REMINDER", f, v)}
-          title={["Enviar cobranças ", " dias antes do vencimento"]}
-          daysField="days"
-          description="Esta mensagem será enviada quando faltar X dias para o vencimento das cobranças."
-        />
-        <EventRow
-          cfg={notifications.PAYMENT_DUE}
-          onChange={(f, v) => setNotif("PAYMENT_DUE", f, v)}
-          title="Enviar cobranças pendentes no dia do vencimento"
-          description="Esta mensagem será enviada na data de vencimento da cobrança caso o seu cliente ainda não a tenha pago."
-        />
-        <EventRow
-          cfg={notifications.PAYMENT_BOLETO_NOT_PRINTED}
-          onChange={(f, v) => setNotif("PAYMENT_BOLETO_NOT_PRINTED", f, v)}
-          title="Enviar linha digitável do boleto caso o cliente não o tenha impresso"
-          description="Esta mensagem será enviada na data de vencimento do boleto caso o seu cliente ainda não o tenha impresso."
-          hasWhatsApp={false}
-        />
-
-        <p className="text-xs font-semibold text-foreground mt-4 mb-1">Notificações para cobranças vencidas</p>
-        <EventRow
-          cfg={notifications.PAYMENT_OVERDUE}
-          onChange={(f, v) => setNotif("PAYMENT_OVERDUE", f, v)}
-          title="Avisar sobre atrasos e falhas nos pagamentos"
-          description="Esta mensagem será enviada quando o seu cliente deixar de pagar uma cobrança."
-          hasPhoneCall
-        />
-        <EventRow
-          cfg={notifications.PAYMENT_OVERDUE_REMINDER}
-          onChange={(f, v) => setNotif("PAYMENT_OVERDUE_REMINDER", f, v)}
-          title={["Relembrar cobranças vencidas a cada ", " dias após o vencimento"]}
-          daysField="days"
-          description="Esta mensagem será enviada a cada X dias enquanto a cobrança não for paga (até 3 notificações)."
-          hasPhoneCall
-        />
-
-        <p className="text-xs font-semibold text-foreground mt-4 mb-1">Notificação para cobranças pagas</p>
-        <EventRow
-          cfg={notifications.PAYMENT_RECEIVED}
-          onChange={(f, v) => setNotif("PAYMENT_RECEIVED", f, v)}
-          title="Avisar quando os pagamentos forem confirmados"
-          description="Esta mensagem será enviada quando os pagamentos das cobranças forem confirmados."
-        />
-        <p className="text-[10px] text-muted-foreground mt-3">* WhatsApp e Ligação requerem plano Asaas com mensageria ativa</p>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={handleSave} disabled={saving}>{saving && <Loader2 size={13} className="animate-spin mr-1" />}Salvar</Button>
+        <Button size="sm" variant="outline" onClick={handleTest} disabled={testing}>{testing && <Loader2 size={13} className="animate-spin mr-1" />}Testar</Button>
       </div>
     </div>
   );
