@@ -1437,10 +1437,11 @@ async def test_google_calendar(current_user: dict = Depends(get_current_user)):
         def _test():
             from googleapiclient.discovery import build
             service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-            cal = service.calendars().get(calendarId=calendar_id).execute()
-            return cal.get("summary", calendar_id)
+            # events().list() is the correct way to verify access to a shared calendar
+            result = service.events().list(calendarId=calendar_id, maxResults=1).execute()
+            return result.get("summary", calendar_id)
         name = await loop.run_in_executor(None, _test)
-        return {"message": f"Conexão OK — calendário: {name}"}
+        return {"message": f"Conexão OK — calendário: {name or calendar_id}"}
     except Exception as exc:
         err = str(exc)
         if "404" in err:
