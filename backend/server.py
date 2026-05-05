@@ -992,6 +992,15 @@ class AsaasSettings(BaseModel):
     api_key: str = ""
     sandbox: bool = True
     enabled: bool = False
+    notify_before_due_email: bool = False
+    notify_before_due_sms: bool = False
+    notify_before_due_whatsapp: bool = False
+    notify_overdue_email: bool = False
+    notify_overdue_sms: bool = False
+    notify_overdue_whatsapp: bool = False
+    notify_paid_email: bool = False
+    notify_paid_sms: bool = False
+    notify_paid_whatsapp: bool = False
 
 class GoogleIntegrationSettings(BaseModel):
     service_account_json: str = ""   # JSON string da service account
@@ -1088,6 +1097,39 @@ async def asaas_create_client_and_charge(client_doc: dict) -> dict:
                     payment = resp2.json()
                     result["asaas_payment_id"] = payment.get("id")
                     result["asaas_payment_link"] = payment.get("bankSlipUrl") or payment.get("invoiceUrl")
+
+                    # Configure customer notifications per saved settings
+                    NOTIF_GROUP = {
+                        "PAYMENT_CREATED": "before_due",
+                        "PAYMENT_UPDATED": "before_due",
+                        "PAYMENT_REMINDER": "before_due",
+                        "PAYMENT_DUE": "before_due",
+                        "PAYMENT_OVERDUE": "overdue",
+                        "PAYMENT_OVERDUE_REMINDER": "overdue",
+                        "PAYMENT_RECEIVED": "paid",
+                    }
+                    if result["asaas_payment_id"]:
+                        notif_resp = await http.get(
+                            f"{base_url}/notifications",
+                            params={"payment": result["asaas_payment_id"]},
+                            headers=headers,
+                        )
+                        if notif_resp.status_code == 200:
+                            for notif in notif_resp.json().get("data", []):
+                                event = notif.get("event", "")
+                                group = NOTIF_GROUP.get(event)
+                                if not group:
+                                    continue
+                                await http.put(
+                                    f"{base_url}/notifications/{notif['id']}",
+                                    json={
+                                        "enabled": True,
+                                        "emailEnabledForCustomer": settings.get(f"notify_{group}_email", False),
+                                        "smsEnabledForCustomer": settings.get(f"notify_{group}_sms", False),
+                                        "whatsappEnabledForCustomer": settings.get(f"notify_{group}_whatsapp", False),
+                                    },
+                                    headers=headers,
+                                )
                 else:
                     logger.error(f"Asaas payment creation failed: {resp2.text}")
 
@@ -1261,12 +1303,38 @@ async def get_asaas_settings(current_user: dict = Depends(get_current_user)):
     masked_key = ""
     if s.get("api_key"):
         masked_key = "•" * (len(s["api_key"]) - 4) + s["api_key"][-4:]
-    return {"api_key_masked": masked_key, "sandbox": s.get("sandbox", True), "enabled": s.get("enabled", False)}
+    return {
+        "api_key_masked": masked_key,
+        "sandbox": s.get("sandbox", True),
+        "enabled": s.get("enabled", False),
+        "notify_before_due_email": s.get("notify_before_due_email", False),
+        "notify_before_due_sms": s.get("notify_before_due_sms", False),
+        "notify_before_due_whatsapp": s.get("notify_before_due_whatsapp", False),
+        "notify_overdue_email": s.get("notify_overdue_email", False),
+        "notify_overdue_sms": s.get("notify_overdue_sms", False),
+        "notify_overdue_whatsapp": s.get("notify_overdue_whatsapp", False),
+        "notify_paid_email": s.get("notify_paid_email", False),
+        "notify_paid_sms": s.get("notify_paid_sms", False),
+        "notify_paid_whatsapp": s.get("notify_paid_whatsapp", False),
+    }
 
 @api_router.put("/settings/asaas")
 async def save_asaas_settings(body: AsaasSettings, current_user: dict = Depends(get_current_user)):
-    update: dict = {"setting_id": "asaas", "sandbox": body.sandbox, "enabled": body.enabled,
-                    "updated_at": datetime.now(timezone.utc).isoformat()}
+    update: dict = {
+        "setting_id": "asaas",
+        "sandbox": body.sandbox,
+        "enabled": body.enabled,
+        "notify_before_due_email": body.notify_before_due_email,
+        "notify_before_due_sms": body.notify_before_due_sms,
+        "notify_before_due_whatsapp": body.notify_before_due_whatsapp,
+        "notify_overdue_email": body.notify_overdue_email,
+        "notify_overdue_sms": body.notify_overdue_sms,
+        "notify_overdue_whatsapp": body.notify_overdue_whatsapp,
+        "notify_paid_email": body.notify_paid_email,
+        "notify_paid_sms": body.notify_paid_sms,
+        "notify_paid_whatsapp": body.notify_paid_whatsapp,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
     if body.api_key and not body.api_key.startswith("•"):
         update["api_key"] = body.api_key
     await db.settings.update_one({"setting_id": "asaas"}, {"$set": update}, upsert=True)

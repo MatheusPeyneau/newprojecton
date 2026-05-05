@@ -797,6 +797,23 @@ export function InstagramApiSection() {
 }
 
 // ─── Asaas Section ────────────────────────────────────────────────────────────
+function NotifRow({ label, email, onEmail, sms, onSms, whatsapp, onWhatsapp }) {
+  return (
+    <div className="grid grid-cols-[1fr_60px_60px_80px] gap-2 items-center">
+      <span className="text-xs text-foreground">{label}</span>
+      <div className="flex justify-center">
+        <input type="checkbox" checked={email} onChange={e => onEmail(e.target.checked)} className="rounded" />
+      </div>
+      <div className="flex justify-center">
+        <input type="checkbox" checked={sms} onChange={e => onSms(e.target.checked)} className="rounded" />
+      </div>
+      <div className="flex justify-center">
+        <input type="checkbox" checked={whatsapp} onChange={e => onWhatsapp(e.target.checked)} className="rounded opacity-60" title="Requer plano Asaas premium" />
+      </div>
+    </div>
+  );
+}
+
 function AsaasSection() {
   const [apiKey, setApiKey] = useState("");
   const [sandbox, setSandbox] = useState(true);
@@ -805,6 +822,15 @@ function AsaasSection() {
   const [maskedKey, setMaskedKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [notifyBeforeDueEmail, setNotifyBeforeDueEmail] = useState(false);
+  const [notifyBeforeDueSms, setNotifyBeforeDueSms] = useState(false);
+  const [notifyBeforeDueWa, setNotifyBeforeDueWa] = useState(false);
+  const [notifyOverdueEmail, setNotifyOverdueEmail] = useState(false);
+  const [notifyOverdueSms, setNotifyOverdueSms] = useState(false);
+  const [notifyOverdueWa, setNotifyOverdueWa] = useState(false);
+  const [notifyPaidEmail, setNotifyPaidEmail] = useState(false);
+  const [notifyPaidSms, setNotifyPaidSms] = useState(false);
+  const [notifyPaidWa, setNotifyPaidWa] = useState(false);
 
   useEffect(() => {
     axios.get(`${API}/settings/asaas`, { headers: getAuthHeader() })
@@ -812,13 +838,33 @@ function AsaasSection() {
         setMaskedKey(r.data.api_key_masked || "");
         setSandbox(r.data.sandbox ?? true);
         setEnabled(r.data.enabled ?? false);
+        setNotifyBeforeDueEmail(r.data.notify_before_due_email ?? false);
+        setNotifyBeforeDueSms(r.data.notify_before_due_sms ?? false);
+        setNotifyBeforeDueWa(r.data.notify_before_due_whatsapp ?? false);
+        setNotifyOverdueEmail(r.data.notify_overdue_email ?? false);
+        setNotifyOverdueSms(r.data.notify_overdue_sms ?? false);
+        setNotifyOverdueWa(r.data.notify_overdue_whatsapp ?? false);
+        setNotifyPaidEmail(r.data.notify_paid_email ?? false);
+        setNotifyPaidSms(r.data.notify_paid_sms ?? false);
+        setNotifyPaidWa(r.data.notify_paid_whatsapp ?? false);
       }).catch(() => {});
   }, []);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const body = { sandbox, enabled };
+      const body = {
+        sandbox, enabled,
+        notify_before_due_email: notifyBeforeDueEmail,
+        notify_before_due_sms: notifyBeforeDueSms,
+        notify_before_due_whatsapp: notifyBeforeDueWa,
+        notify_overdue_email: notifyOverdueEmail,
+        notify_overdue_sms: notifyOverdueSms,
+        notify_overdue_whatsapp: notifyOverdueWa,
+        notify_paid_email: notifyPaidEmail,
+        notify_paid_sms: notifyPaidSms,
+        notify_paid_whatsapp: notifyPaidWa,
+      };
       if (apiKey) body.api_key = apiKey;
       await axios.put(`${API}/settings/asaas`, body, { headers: getAuthHeader() });
       if (apiKey) { setMaskedKey(`${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`); setApiKey(""); }
@@ -837,15 +883,14 @@ function AsaasSection() {
   };
 
   return (
-    <div className="bg-card border border-border rounded-lg p-5 mb-4">
+    <div className="space-y-0">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold flex items-center gap-2"><CreditCard size={15} />Asaas — Cobrança</h3>
-        <label className="flex items-center gap-2 cursor-pointer">
+        <p className="text-xs text-muted-foreground">Cria cliente e cobrança no Asaas automaticamente ao cadastrar um novo cliente.</p>
+        <label className="flex items-center gap-2 cursor-pointer shrink-0 ml-3">
           <Switch checked={enabled} onCheckedChange={setEnabled} />
           <span className="text-xs text-muted-foreground">{enabled ? "Ativo" : "Inativo"}</span>
         </label>
       </div>
-      <p className="text-xs text-muted-foreground mb-3">Cria cliente e cobrança no Asaas automaticamente ao cadastrar um novo cliente.</p>
       <div className="mb-3">
         <Label className="text-xs mb-1 block">API Key do Asaas</Label>
         {maskedKey && !showKey ? (
@@ -863,9 +908,43 @@ function AsaasSection() {
           <span className="text-xs text-muted-foreground">Modo sandbox (testes)</span>
         </label>
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-2 mb-4">
         <Button size="sm" onClick={handleSave} disabled={saving}>{saving && <Loader2 size={13} className="animate-spin mr-1" />}Salvar</Button>
         <Button size="sm" variant="outline" onClick={handleTest} disabled={testing}>{testing && <Loader2 size={13} className="animate-spin mr-1" />}Testar</Button>
+      </div>
+
+      <div className="border-t border-border pt-4">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Notificações para o cliente</p>
+        <div className="space-y-2">
+          <div className="grid grid-cols-[1fr_60px_60px_80px] gap-2 text-[11px] text-muted-foreground font-medium pb-1 border-b border-border">
+            <span>Evento</span>
+            <span className="text-center">Email</span>
+            <span className="text-center">SMS</span>
+            <span className="text-center">WhatsApp</span>
+          </div>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pt-1">Antes do vencimento</p>
+          <NotifRow
+            label="Criação e lembretes da cobrança"
+            email={notifyBeforeDueEmail} onEmail={setNotifyBeforeDueEmail}
+            sms={notifyBeforeDueSms} onSms={setNotifyBeforeDueSms}
+            whatsapp={notifyBeforeDueWa} onWhatsapp={setNotifyBeforeDueWa}
+          />
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pt-1">Cobrança vencida</p>
+          <NotifRow
+            label="Atraso e lembretes de vencimento"
+            email={notifyOverdueEmail} onEmail={setNotifyOverdueEmail}
+            sms={notifyOverdueSms} onSms={setNotifyOverdueSms}
+            whatsapp={notifyOverdueWa} onWhatsapp={setNotifyOverdueWa}
+          />
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pt-1">Pagamento confirmado</p>
+          <NotifRow
+            label="Aviso de pagamento recebido"
+            email={notifyPaidEmail} onEmail={setNotifyPaidEmail}
+            sms={notifyPaidSms} onSms={setNotifyPaidSms}
+            whatsapp={notifyPaidWa} onWhatsapp={setNotifyPaidWa}
+          />
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-3">* WhatsApp requer plano Asaas com mensageria ativa</p>
       </div>
     </div>
   );
@@ -1234,6 +1313,11 @@ export default function Configuracoes() {
         <MembersSection currentUser={user} />
       </Accordion>
 
+      {/* Accordion — Asaas */}
+      <Accordion title="Asaas — Cobrança" icon={CreditCard} defaultOpen={false}>
+        <AsaasSection />
+      </Accordion>
+
       {/* Accordion — Integrações */}
       <Accordion title="Integrações" icon={Globe} defaultOpen={false}>
         {/* Appearance */}
@@ -1255,7 +1339,6 @@ export default function Configuracoes() {
 
         {/* Integrações Nativas */}
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Integrações Nativas</p>
-        <AsaasSection />
         <GoogleIntegrationSection />
         <ContractTemplateSection />
 
