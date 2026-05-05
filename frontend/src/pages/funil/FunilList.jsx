@@ -92,7 +92,7 @@ export default function FunilList() {
     }
   };
 
-  const useTemplate = async (tmpl) => {
+  const applyTemplate = async (tmpl) => {
     setCreating(true);
     try {
       const res = await fetch(`${API}/api/funnels`, {
@@ -232,7 +232,7 @@ export default function FunilList() {
                   {t.description && <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{t.description}</p>}
                   <p className="text-xs text-muted-foreground">{nodeCount} {nodeCount === 1 ? "etapa" : "etapas"}</p>
                   <button
-                    onClick={() => useTemplate(t)}
+                    onClick={() => applyTemplate(t)}
                     disabled={creating}
                     className="mt-3 w-full text-xs bg-primary/10 text-primary hover:bg-primary/20 rounded-lg py-1.5 font-medium transition-colors disabled:opacity-60"
                   >
