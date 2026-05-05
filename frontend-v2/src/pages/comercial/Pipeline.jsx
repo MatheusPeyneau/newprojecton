@@ -257,7 +257,7 @@ function NewStageDialog({ open, onClose, onCreated }) {
 // ——— Won Deal Dialog ———
 function WonDealDialog({ open, pendingMove, onConfirm, onCancel }) {
   const deal = pendingMove?.deal;
-  const [form, setForm] = useState({ cpf_cnpj: "", start_date: "", contract_months: "1", billing_type: "BOLETO" });
+  const [form, setForm] = useState({ cpf_cnpj: "", start_date: "", due_date: "", contract_months: "1", billing_type: "BOLETO" });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -266,6 +266,7 @@ function WonDealDialog({ open, pendingMove, onConfirm, onCancel }) {
       setForm({
         cpf_cnpj: deal.cpf_cnpj || "",
         start_date: today,
+        due_date: deal.due_date || "",
         contract_months: String(deal.contract_months || "1"),
         billing_type: deal.billing_type || "BOLETO",
       });
@@ -303,6 +304,14 @@ function WonDealDialog({ open, pendingMove, onConfirm, onCancel }) {
               type="date"
               value={form.start_date}
               onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Vencimento da fatura</Label>
+            <Input
+              type="date"
+              value={form.due_date}
+              onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -1214,6 +1223,7 @@ function DefaultPipelineBoard() {
           stage_id: targetStage.stage_id,
           cpf_cnpj: wonForm.cpf_cnpj,
           start_date: wonForm.start_date,
+          due_date: wonForm.due_date,
           contract_months: wonForm.contract_months,
           billing_type: wonForm.billing_type,
         },
