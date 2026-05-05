@@ -890,22 +890,18 @@ function AsaasSection() {
   );
 }
 
-// ─── Google Drive & Calendar Section ──────────────────────────────────────────
-function GoogleIntegrationSection() {
+// ─── Google Drive Section ─────────────────────────────────────────────────────
+function GoogleDriveSection() {
   const [serviceAccount, setServiceAccount] = useState("");
   const [driveFolder, setDriveFolder] = useState("");
-  const [calendarId, setCalendarId] = useState("");
   const [driveEnabled, setDriveEnabled] = useState(false);
-  const [calendarEnabled, setCalendarEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    axios.get(`${API}/settings/google-integration`, { headers: getAuthHeader() })
+    axios.get(`${API}/settings/google-drive`, { headers: getAuthHeader() })
       .then(r => {
         setDriveFolder(r.data.drive_folder_id || "");
-        setCalendarId(r.data.calendar_id || "");
         setDriveEnabled(r.data.drive_enabled ?? false);
-        setCalendarEnabled(r.data.calendar_enabled ?? false);
         if (r.data.has_service_account) setServiceAccount("••••••••••••••••");
       }).catch(() => {});
   }, []);
@@ -913,42 +909,79 @@ function GoogleIntegrationSection() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const body = { drive_folder_id: driveFolder, calendar_id: calendarId, drive_enabled: driveEnabled, calendar_enabled: calendarEnabled };
+      const body = { drive_root_folder_id: driveFolder, drive_enabled: driveEnabled };
       if (serviceAccount && !serviceAccount.startsWith("•")) body.service_account_json = serviceAccount;
-      await axios.put(`${API}/settings/google-integration`, body, { headers: getAuthHeader() });
-      toast.success("Configurações Google salvas!");
+      await axios.put(`${API}/settings/google-drive`, body, { headers: getAuthHeader() });
+      toast.success("Configurações Google Drive salvas!");
     } catch (err) { toast.error(err.response?.data?.detail || "Erro ao salvar"); }
     setSaving(false);
   };
 
   return (
-    <div className="bg-card border border-border rounded-lg p-5 mb-4">
-      <h3 className="text-sm font-semibold flex items-center gap-2 mb-3"><HardDrive size={15} />Google Drive & Calendar</h3>
-      <p className="text-xs text-muted-foreground mb-3">Cria pasta no Drive por cliente e agenda reuniões no Google Calendar via Service Account.</p>
+    <div className="space-y-0">
+      <p className="text-xs text-muted-foreground mb-3">Cria uma pasta no Google Drive automaticamente ao cadastrar cada novo cliente.</p>
       <div className="mb-3">
         <Label className="text-xs mb-1 block">Service Account JSON</Label>
-        <textarea value={serviceAccount} onChange={e => setServiceAccount(e.target.value)} rows={4}
+        <textarea
+          value={serviceAccount}
+          onChange={e => setServiceAccount(e.target.value)}
+          rows={4}
           placeholder='{"type":"service_account","project_id":"..."}'
-          className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-background resize-y focus:outline-none focus:ring-2 focus:ring-ring font-mono" />
+          className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-background resize-y focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+        />
+        <p className="text-[10px] text-muted-foreground mt-1">Gerado no Google Cloud Console → IAM → Contas de serviço</p>
       </div>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <Label className="text-xs mb-1 block">Drive Folder ID</Label>
-          <Input value={driveFolder} onChange={e => setDriveFolder(e.target.value)} placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs" className="text-xs" />
-        </div>
-        <div>
-          <Label className="text-xs mb-1 block">Calendar ID</Label>
-          <Input value={calendarId} onChange={e => setCalendarId(e.target.value)} placeholder="primary" className="text-xs" />
-        </div>
+      <div className="mb-4">
+        <Label className="text-xs mb-1 block">ID da pasta raiz no Drive</Label>
+        <Input value={driveFolder} onChange={e => setDriveFolder(e.target.value)} placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs" className="text-xs" />
+        <p className="text-[10px] text-muted-foreground mt-1">ID da URL ao abrir a pasta no Drive. A service account precisa ter acesso de Editor.</p>
       </div>
-      <div className="flex gap-4 mb-4">
+      <div className="flex items-center gap-3 mb-4">
         <label className="flex items-center gap-2 cursor-pointer">
           <Switch checked={driveEnabled} onCheckedChange={setDriveEnabled} />
-          <span className="text-xs text-muted-foreground">Drive ativo</span>
+          <span className="text-xs text-muted-foreground">{driveEnabled ? "Ativo" : "Inativo"}</span>
         </label>
+      </div>
+      <Button size="sm" onClick={handleSave} disabled={saving}>{saving && <Loader2 size={13} className="animate-spin mr-1" />}Salvar</Button>
+    </div>
+  );
+}
+
+// ─── Google Agenda Section ────────────────────────────────────────────────────
+function GoogleCalendarSection() {
+  const [calendarId, setCalendarId] = useState("primary");
+  const [calendarEnabled, setCalendarEnabled] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    axios.get(`${API}/settings/google-calendar`, { headers: getAuthHeader() })
+      .then(r => {
+        setCalendarId(r.data.calendar_id || "primary");
+        setCalendarEnabled(r.data.calendar_enabled ?? false);
+      }).catch(() => {});
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await axios.put(`${API}/settings/google-calendar`, { calendar_id: calendarId, calendar_enabled: calendarEnabled }, { headers: getAuthHeader() });
+      toast.success("Configurações Google Agenda salvas!");
+    } catch (err) { toast.error(err.response?.data?.detail || "Erro ao salvar"); }
+    setSaving(false);
+  };
+
+  return (
+    <div className="space-y-0">
+      <p className="text-xs text-muted-foreground mb-3">Cria eventos automaticamente quando um lead é movido para uma etapa marcada como <strong>Reunião</strong> no pipeline.</p>
+      <div className="mb-3">
+        <Label className="text-xs mb-1 block">Calendar ID</Label>
+        <Input value={calendarId} onChange={e => setCalendarId(e.target.value)} placeholder="primary" className="text-xs" />
+        <p className="text-[10px] text-muted-foreground mt-1">Use <code className="font-mono">primary</code> para o calendário principal ou o ID de outro calendário. A service account configurada no Google Drive precisa ter acesso de Editor a este calendário.</p>
+      </div>
+      <div className="flex items-center gap-3 mb-4">
         <label className="flex items-center gap-2 cursor-pointer">
           <Switch checked={calendarEnabled} onCheckedChange={setCalendarEnabled} />
-          <span className="text-xs text-muted-foreground">Calendar ativo</span>
+          <span className="text-xs text-muted-foreground">{calendarEnabled ? "Ativo" : "Inativo"}</span>
         </label>
       </div>
       <Button size="sm" onClick={handleSave} disabled={saving}>{saving && <Loader2 size={13} className="animate-spin mr-1" />}Salvar</Button>
@@ -1258,6 +1291,16 @@ export default function Configuracoes() {
         <AsaasSection />
       </Accordion>
 
+      {/* Accordion — Google Drive */}
+      <Accordion title="Google Drive" icon={HardDrive} defaultOpen={false}>
+        <GoogleDriveSection />
+      </Accordion>
+
+      {/* Accordion — Google Agenda */}
+      <Accordion title="Google Agenda" icon={CalendarClock} defaultOpen={false}>
+        <GoogleCalendarSection />
+      </Accordion>
+
       {/* Accordion — Integrações */}
       <Accordion title="Integrações" icon={Globe} defaultOpen={false}>
         {/* Appearance */}
@@ -1279,7 +1322,6 @@ export default function Configuracoes() {
 
         {/* Integrações Nativas */}
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Integrações Nativas</p>
-        <GoogleIntegrationSection />
         <ContractTemplateSection />
 
         {/* Webhooks N8N (legado) */}

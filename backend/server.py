@@ -1002,6 +1002,15 @@ class GoogleIntegrationSettings(BaseModel):
     drive_enabled: bool = False
     calendar_enabled: bool = False
 
+class GoogleDriveSettings(BaseModel):
+    service_account_json: str = ""
+    drive_root_folder_id: str = ""
+    drive_enabled: bool = False
+
+class GoogleCalendarSettings(BaseModel):
+    calendar_id: str = "primary"
+    calendar_enabled: bool = False
+
 class ContractTemplateSettings(BaseModel):
     template: str = ""
     enabled: bool = False
@@ -1365,6 +1374,49 @@ async def save_google_integration_settings(body: GoogleIntegrationSettings, curr
             raise HTTPException(status_code=400, detail="JSON da Service Account inválido")
     await db.settings.update_one({"setting_id": "google_integration"}, {"$set": update}, upsert=True)
     return {"message": "Configuração Google salva"}
+
+@api_router.get("/settings/google-drive")
+async def get_google_drive_settings(current_user: dict = Depends(get_current_user)):
+    s = await _get_google_settings()
+    return {
+        "has_service_account": bool(s.get("service_account_json")),
+        "drive_folder_id": s.get("drive_root_folder_id", ""),
+        "drive_enabled": s.get("drive_enabled", False),
+    }
+
+@api_router.put("/settings/google-drive")
+async def save_google_drive_settings(body: GoogleDriveSettings, current_user: dict = Depends(get_current_user)):
+    update: dict = {
+        "drive_root_folder_id": body.drive_root_folder_id,
+        "drive_enabled": body.drive_enabled,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if body.service_account_json and not body.service_account_json.startswith("•"):
+        try:
+            json_module.loads(body.service_account_json)
+            update["service_account_json"] = body.service_account_json
+        except Exception:
+            raise HTTPException(status_code=400, detail="Service Account JSON inválido")
+    await db.settings.update_one({"setting_id": "google_integration"}, {"$set": update}, upsert=True)
+    return {"message": "Configurações Google Drive salvas"}
+
+@api_router.get("/settings/google-calendar")
+async def get_google_calendar_settings(current_user: dict = Depends(get_current_user)):
+    s = await _get_google_settings()
+    return {
+        "calendar_id": s.get("calendar_id", "primary"),
+        "calendar_enabled": s.get("calendar_enabled", False),
+    }
+
+@api_router.put("/settings/google-calendar")
+async def save_google_calendar_settings(body: GoogleCalendarSettings, current_user: dict = Depends(get_current_user)):
+    update: dict = {
+        "calendar_id": body.calendar_id or "primary",
+        "calendar_enabled": body.calendar_enabled,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.settings.update_one({"setting_id": "google_integration"}, {"$set": update}, upsert=True)
+    return {"message": "Configurações Google Agenda salvas"}
 
 @api_router.get("/settings/contract-template")
 async def get_contract_template(current_user: dict = Depends(get_current_user)):
