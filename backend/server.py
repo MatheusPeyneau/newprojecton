@@ -1418,6 +1418,37 @@ async def save_google_calendar_settings(body: GoogleCalendarSettings, current_us
     await db.settings.update_one({"setting_id": "google_integration"}, {"$set": update}, upsert=True)
     return {"message": "Configurações Google Agenda salvas"}
 
+@api_router.post("/settings/google-calendar/test")
+async def test_google_calendar(current_user: dict = Depends(get_current_user)):
+    if not GOOGLE_LIBS_OK:
+        raise HTTPException(status_code=500, detail="Bibliotecas Google não instaladas no servidor (google-auth, google-api-python-client)")
+    s = await _get_google_settings()
+    if not s.get("service_account_json"):
+        raise HTTPException(status_code=400, detail="Service Account JSON não configurada (configure em Google Drive)")
+    if not s.get("calendar_enabled"):
+        raise HTTPException(status_code=400, detail="Google Agenda está desativado — ative o toggle e salve")
+    creds = _build_google_creds(s["service_account_json"], ["https://www.googleapis.com/auth/calendar"])
+    if not creds:
+        raise HTTPException(status_code=400, detail="Service Account JSON inválido ou mal formatado")
+    calendar_id = s.get("calendar_id", "primary")
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        def _test():
+            from googleapiclient.discovery import build
+            service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+            cal = service.calendars().get(calendarId=calendar_id).execute()
+            return cal.get("summary", calendar_id)
+        name = await loop.run_in_executor(None, _test)
+        return {"message": f"Conexão OK — calendário: {name}"}
+    except Exception as exc:
+        err = str(exc)
+        if "404" in err:
+            raise HTTPException(status_code=400, detail=f"Calendário '{calendar_id}' não encontrado. Verifique se o calendário foi compartilhado com a service account.")
+        if "403" in err:
+            raise HTTPException(status_code=400, detail="Sem permissão. Compartilhe o calendário com a service account e dê permissão de 'Fazer alterações nos eventos'.")
+        raise HTTPException(status_code=400, detail=f"Erro: {err}")
+
 @api_router.get("/settings/contract-template")
 async def get_contract_template(current_user: dict = Depends(get_current_user)):
     s = await db.settings.find_one({"setting_id": "contract_template"}, {"_id": 0})

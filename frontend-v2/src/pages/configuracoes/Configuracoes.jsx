@@ -952,6 +952,7 @@ function GoogleCalendarSection() {
   const [calendarId, setCalendarId] = useState("primary");
   const [calendarEnabled, setCalendarEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     axios.get(`${API}/settings/google-calendar`, { headers: getAuthHeader() })
@@ -970,6 +971,15 @@ function GoogleCalendarSection() {
     setSaving(false);
   };
 
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      const res = await axios.post(`${API}/settings/google-calendar/test`, {}, { headers: getAuthHeader() });
+      toast.success(res.data.message || "Conexão OK!");
+    } catch (err) { toast.error(err.response?.data?.detail || "Falha na conexão"); }
+    setTesting(false);
+  };
+
   return (
     <div className="space-y-0">
       <p className="text-xs text-muted-foreground mb-3">Cria eventos automaticamente quando um lead é movido para uma etapa marcada como <strong>Reunião</strong> no pipeline.</p>
@@ -984,7 +994,10 @@ function GoogleCalendarSection() {
           <span className="text-xs text-muted-foreground">{calendarEnabled ? "Ativo" : "Inativo"}</span>
         </label>
       </div>
-      <Button size="sm" onClick={handleSave} disabled={saving}>{saving && <Loader2 size={13} className="animate-spin mr-1" />}Salvar</Button>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={handleSave} disabled={saving}>{saving && <Loader2 size={13} className="animate-spin mr-1" />}Salvar</Button>
+        <Button size="sm" variant="outline" onClick={handleTest} disabled={testing}>{testing && <Loader2 size={13} className="animate-spin mr-1" />}Testar</Button>
+      </div>
     </div>
   );
 }
