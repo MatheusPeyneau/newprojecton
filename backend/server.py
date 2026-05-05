@@ -230,6 +230,8 @@ class DealUpdate(BaseModel):
     cpf_cnpj: Optional[str] = None
     billing_type: Optional[str] = None
     due_date: Optional[str] = None
+    start_date: Optional[str] = None
+    contract_months: Optional[int] = None
     meeting_date: Optional[str] = None
     meeting_email: Optional[str] = None
     probability: Optional[int] = None
@@ -896,7 +898,7 @@ async def auto_create_client_from_deal(deal: dict, current_user: dict) -> Option
         "status": "ativo",
         "monthly_value": deal.get("value") or 0,
         "billing_type": deal.get("billing_type") or "BOLETO",
-        "start_date": today,
+        "start_date": deal.get("start_date") or today,
         "due_date": deal.get("due_date"),
         "notes": deal.get("notes") or "",
         "client_type": "recorrente",

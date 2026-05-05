@@ -254,6 +254,94 @@ function NewStageDialog({ open, onClose, onCreated }) {
   );
 }
 
+// ——— Won Deal Dialog ———
+function WonDealDialog({ open, pendingMove, onConfirm, onCancel }) {
+  const deal = pendingMove?.deal;
+  const [form, setForm] = useState({ cpf_cnpj: "", start_date: "", contract_months: "1", billing_type: "BOLETO" });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open && deal) {
+      const today = new Date().toISOString().split("T")[0];
+      setForm({
+        cpf_cnpj: deal.cpf_cnpj || "",
+        start_date: today,
+        contract_months: String(deal.contract_months || "1"),
+        billing_type: deal.billing_type || "BOLETO",
+      });
+    }
+  }, [open, deal]);
+
+  const handleConfirm = async () => {
+    setSaving(true);
+    await onConfirm({ ...form, contract_months: parseInt(form.contract_months, 10) });
+    setSaving(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onCancel()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Trophy size={16} className="text-emerald-500" />
+            Negócio Fechado!
+          </DialogTitle>
+          {deal && <p className="text-xs text-muted-foreground">Lead: {deal.title}</p>}
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">CNPJ / CPF</Label>
+            <Input
+              value={form.cpf_cnpj}
+              onChange={e => setForm(f => ({ ...f, cpf_cnpj: e.target.value }))}
+              placeholder="00.000.000/0001-00"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Data de início do contrato</Label>
+            <Input
+              type="date"
+              value={form.start_date}
+              onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Duração do contrato</Label>
+              <Select value={form.contract_months} onValueChange={v => setForm(f => ({ ...f, contract_months: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 mês</SelectItem>
+                  <SelectItem value="3">3 meses</SelectItem>
+                  <SelectItem value="6">6 meses</SelectItem>
+                  <SelectItem value="12">12 meses</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Forma de pagamento</Label>
+              <Select value={form.billing_type} onValueChange={v => setForm(f => ({ ...f, billing_type: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="BOLETO">Boleto</SelectItem>
+                  <SelectItem value="PIX">PIX</SelectItem>
+                  <SelectItem value="CREDIT_CARD">Cartão de Crédito</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>Cancelar movimento</Button>
+          <Button onClick={handleConfirm} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
+            {saving ? <><Loader2 size={13} className="animate-spin mr-1.5" />Salvando...</> : <><Trophy size={13} className="mr-1.5" />Confirmar Fechamento</>}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ——— Meeting Schedule Dialog ———
 function MeetingScheduleDialog({ open, pendingMove, onConfirm, onCancel }) {
   const deal = pendingMove?.deal;
@@ -926,6 +1014,8 @@ function DefaultPipelineBoard() {
   const [webhookStatuses, setWebhookStatuses] = useState({});
   // Meeting scheduling
   const [pendingMeetingMove, setPendingMeetingMove] = useState(null);
+  // Won deal — collect contract info before moving
+  const [pendingWonMove, setPendingWonMove] = useState(null);
 
   const deletedTimers = useRef({});
 
@@ -1027,6 +1117,12 @@ function DefaultPipelineBoard() {
       return;
     }
 
+    // Check if won stage — collect contract info before moving
+    if (targetStage.is_won_stage) {
+      setPendingWonMove({ dealId: active.id, targetStage, deal: movedDeal });
+      return;
+    }
+
     // Normal move
     setDeals((prev) => prev.map((d) => d.deal_id === active.id ? { ...d, stage_id: targetStage.stage_id } : d));
     try {
@@ -1103,6 +1199,47 @@ function DefaultPipelineBoard() {
   };
 
   const handleCancelMeeting = () => setPendingMeetingMove(null);
+
+  const handleConfirmWon = async (wonForm) => {
+    if (!pendingWonMove) return;
+    const { dealId, targetStage, deal } = pendingWonMove;
+
+    // Optimistic move
+    setDeals(prev => prev.map(d => d.deal_id === dealId ? { ...d, stage_id: targetStage.stage_id } : d));
+
+    try {
+      const res = await axios.put(
+        `${API}/pipeline/deals/${dealId}`,
+        {
+          stage_id: targetStage.stage_id,
+          cpf_cnpj: wonForm.cpf_cnpj,
+          start_date: wonForm.start_date,
+          contract_months: wonForm.contract_months,
+          billing_type: wonForm.billing_type,
+        },
+        { headers: getAuthHeader() }
+      );
+      if (res.data._client_auto_created) {
+        toast.success("Cliente criado automaticamente!", {
+          description: `${deal?.title || "Lead"} foi adicionado à aba Clientes.`,
+          action: { label: "Ver Clientes", onClick: () => (window.location.href = "/clientes") },
+          duration: 8000,
+        });
+      } else {
+        toast.success("Negócio fechado!", { description: `${deal?.title || "Lead"} movido para ${targetStage.name}.` });
+      }
+      fireWebhook(dealId, targetStage);
+    } catch {
+      toast.error("Erro ao confirmar fechamento.");
+      fetchData();
+    }
+    setPendingWonMove(null);
+  };
+
+  const handleCancelWon = () => {
+    setPendingWonMove(null);
+    fetchData(); // reset optimistic move if user cancelled
+  };
 
   const openAddDeal = (stageId) => {
     setForm({ ...EMPTY_DEAL, stage_id: stageId });
@@ -1271,6 +1408,14 @@ function DefaultPipelineBoard() {
         pendingMove={pendingMeetingMove}
         onConfirm={handleConfirmMeeting}
         onCancel={handleCancelMeeting}
+      />
+
+      {/* Won Deal Dialog */}
+      <WonDealDialog
+        open={!!pendingWonMove}
+        pendingMove={pendingWonMove}
+        onConfirm={handleConfirmWon}
+        onCancel={handleCancelWon}
       />
     </div>
   );
