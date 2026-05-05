@@ -1253,19 +1253,21 @@ def generate_contract_pdf(client_doc: dict, template: str) -> bytes:
         return b""
 
 
-async def calendar_create_event(payload: dict) -> Optional[str]:
-    """Create a Google Calendar event. Returns event link or None."""
+async def calendar_create_event(payload: dict) -> tuple[Optional[str], Optional[str]]:
+    """Create a Google Calendar event. Returns (event_link, error_message)."""
     try:
         settings = await _get_google_settings()
-        if not settings.get("calendar_enabled") or not settings.get("service_account_json"):
-            return None
+        if not settings.get("calendar_enabled"):
+            return None, None  # silently skip if disabled
+        if not settings.get("service_account_json"):
+            return None, "Service Account não configurada"
 
         creds = _build_google_creds(
             settings["service_account_json"],
             ["https://www.googleapis.com/auth/calendar"]
         )
         if not creds:
-            return None
+            return None, "Credenciais Google inválidas"
 
         calendar_id = settings.get("calendar_id", "primary")
         meeting_date = payload.get("meetingDate", "")
@@ -1273,7 +1275,7 @@ async def calendar_create_event(payload: dict) -> Optional[str]:
         end_time = payload.get("endTime", "10:00")
 
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _create_event():
             service = build("calendar", "v3", credentials=creds, cache_discovery=False)
@@ -1291,10 +1293,11 @@ async def calendar_create_event(payload: dict) -> Optional[str]:
 
         link = await loop.run_in_executor(None, _create_event)
         logger.info(f"Calendar: evento criado → {link}")
-        return link
+        return link, None
     except Exception as exc:
-        logger.error(f"Calendar event creation error: {exc}")
-        return None
+        err = str(exc)
+        logger.error(f"Calendar event creation error: {err}")
+        return None, err
 
 
 # ============= INTEGRATION SETTINGS ENDPOINTS =============
@@ -3718,12 +3721,16 @@ async def forward_meeting_schedule(body: MeetingSchedulePayload):
     payload["scheduledAt"] = payload.get("scheduledAt") or datetime.now(timezone.utc).isoformat()
 
     calendar_link = None
+    calendar_error = None
 
     # 1. Google Calendar direto
-    cal_link = await calendar_create_event(payload)
+    cal_link, cal_err = await calendar_create_event(payload)
     if cal_link:
         calendar_link = cal_link
         logger.info(f"Meeting: evento criado no Google Calendar → {cal_link}")
+    elif cal_err:
+        calendar_error = cal_err
+        logger.warning(f"Meeting: falha ao criar evento no Calendar: {cal_err}")
 
     # 2. N8N fallback (mantém compatibilidade)
     settings = await db.settings.find_one({"setting_id": "webhook_meeting"}, {"_id": 0})
@@ -3738,7 +3745,7 @@ async def forward_meeting_schedule(body: MeetingSchedulePayload):
         except Exception as exc:
             logger.warning(f"Meeting webhook forward failed: {exc}")
 
-    return {"success": True, "received": True, "calendar_link": calendar_link}
+    return {"success": True, "received": True, "calendar_link": calendar_link, "calendar_error": calendar_error}
 
 
 @api_router.get("/settings/meeting-webhook")

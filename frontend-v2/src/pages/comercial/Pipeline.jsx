@@ -1071,8 +1071,20 @@ function DefaultPipelineBoard() {
         { stage_id: targetStage.stage_id, meeting_date: meetingForm.date, meeting_email: meetingForm.email },
         { headers: getAuthHeader() }
       );
-      // Forward to N8N via meeting webhook (public endpoint)
-      axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/webhook/meeting-schedule`, payload).catch(() => {});
+      // Forward to N8N / Google Calendar via meeting webhook (public endpoint)
+      try {
+        const calRes = await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/webhook/meeting-schedule`, payload);
+        if (calRes.data?.calendar_link) {
+          toast.success("Evento criado no Google Agenda!", {
+            description: `${meetingForm.date} das ${meetingForm.startTime} às ${meetingForm.endTime}`,
+            action: { label: "Abrir", onClick: () => window.open(calRes.data.calendar_link, "_blank") },
+          });
+        } else if (calRes.data?.calendar_error) {
+          toast.error(`Erro no Google Agenda: ${calRes.data.calendar_error}`);
+        }
+      } catch (calErr) {
+        toast.error(`Erro ao conectar com o servidor: ${calErr?.response?.data?.detail || calErr.message}`);
+      }
       // Auto-client creation toast
       if (res.data._client_auto_created) {
         toast.success("Cliente criado automaticamente!", {
